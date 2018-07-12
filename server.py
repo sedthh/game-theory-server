@@ -2,6 +2,7 @@ import asyncio
 import websockets
 import json
 import time
+import numpy as np
 
 CONNECTIONS	= {}
 ID			= 0
@@ -15,6 +16,7 @@ async def server(websocket, path):
 		"challanger": None,
 		"session"	: time.time(),
 		"score"		: 0,
+		"games"		: 0,
 		"choice"	: ""
 	}
 	ID			+= 1
@@ -74,8 +76,15 @@ async def server(websocket, path):
 							if found:
 								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") is challanging "+CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"]+" (id: "+str(CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"])+")")
 								response["message"]		= "Game start."
+								response["data"]		= get_game_environment()
+								response["data"]["score"]= CONNECTIONS[websocket]["score"]
+								response["data"]["o_score"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"]
+								response["data"]["games"]= CONNECTIONS[websocket]["games"]
+								response["data"]["o_games"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"]								
 								response["data"]["challanger"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"]
 								await websocket.send(json.dumps(response))
+								response["data"]["score"], response["data"]["o_score"] = response["data"]["o_score"], response["data"]["score"]
+								response["data"]["games"], response["data"]["o_games"] = response["data"]["o_games"], response["data"]["games"]
 								response["data"]["challanger"]= CONNECTIONS[websocket]["id"]
 								await CONNECTIONS[websocket]["challanger"].send(json.dumps(response))
 							else:
@@ -84,8 +93,7 @@ async def server(websocket, path):
 								response["error"]		= True
 								await websocket.send(json.dumps(response))
 						else:
-							log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") is already in a game.")
-							response["message"]		= "Game continues."
+							response["message"]		= "You are already in a game session."
 							response["data"]["challanger"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"]
 							await websocket.send(json.dumps(response))
 					else:
@@ -97,10 +105,29 @@ async def server(websocket, path):
 						if CONNECTIONS[websocket]["challanger"]:
 							CONNECTIONS[websocket]["choice"]	= data["action"]
 							if CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"]:
-								# TODO: implement game logic
+								# GAME LOGIC
+								a_score, b_score		= get_game_results(CONNECTIONS[websocket]["choice"], CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"])
+								CONNECTIONS[websocket]["score"]+=a_score
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"]+=b_score
+								CONNECTIONS[websocket]["games"]+=1
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"]+=1
+								
+								response["data"]["score"]= CONNECTIONS[websocket]["score"]
+								response["data"]["o_score"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"]
+								response["data"]["choice"]= CONNECTIONS[websocket]["choice"]
+								response["data"]["o_choice"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"]
+								response["data"]["games"]= CONNECTIONS[websocket]["games"]
+								response["data"]["o_games"]= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"]								
 								response["message"]		= "Game set."
 								await websocket.send(json.dumps(response))
+								response["data"]["score"], response["data"]["o_score"] = response["data"]["o_score"], response["data"]["score"]
+								response["data"]["choice"], response["data"]["o_choice"] = response["data"]["o_choice"], response["data"]["choice"]
+								response["data"]["games"], response["data"]["o_games"] = response["data"]["o_games"], response["data"]["games"]
 								await CONNECTIONS[websocket]["challanger"].send(json.dumps(response))
+								CONNECTIONS[websocket]["choice"]= ""
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"] = ""
+								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") VS "+CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"]+" (id: "+str(CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"])+"): "+str(a_score)+"-"+str(b_score))
+								# END OF GAME LOGIC
 							else:
 								response["message"]		= CONNECTIONS[websocket]["name"]+" has chosen."
 								await websocket.send(json.dumps(response))
@@ -127,7 +154,32 @@ async def server(websocket, path):
 
 def log(message):
 	print(time.strftime("%H:%M:%S", time.gmtime())+" > "+str(message))
-		
+	
+def get_game_environment():
+	return {
+		"environment"	: np.random.choice(["default","pleasant","unpleasant"]),
+		"rotation"		: np.random.choice([0,90,180,270]),
+	}
+
+def get_game_results(a,b):
+	a_score	= 0
+	b_score	= 0
+	if a=="cooperate":
+		if b=="cooperate":
+			a_score	= 3
+			b_score	= 3
+		else:
+			a_score	= 0
+			b_score	= 5
+	else:
+		if b=="cooperate":
+			a_score	= 5
+			b_score	= 0
+		else:
+			a_score	= 1
+			b_score	= 1
+	return a_score, b_score	
+	
 if __name__ == "__main__":
 	log("Server started...")
 	service = websockets.serve(server, 'localhost', 8765)
