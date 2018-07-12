@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Python Websocket Client</title>
+		<style>
+			input{
+				margin:5px;
+				padding:5px;
+			}
+		</style>
+    </head>
+	<script src="js/jquery.min.js"></script>
+    <body>
+		<input id="name" type="text" value="Tibi">
+		<input id="login" type="button" value="login">
+		<input id="search" type="button" value="search">
+		<br />
+		<input id="cooperate" type="button" value="cooperate">
+		<input id="defect" type="button" value="defect">
+		<hr />
+		<p id="output"></p>
+        <script>
+            var ws = new WebSocket("ws://127.0.0.1:8765/")
+            ws.onopen = function() {
+				console.log("connected")
+			}
+			ws.onmessage = function (event) {
+                data	= JSON.parse(event["data"])
+				console.log(data);
+				$("#output").text(data["message"])
+            };
+			ws.onclose = function(event) { 
+				console.log(event);
+				$("#output").text("Server disconnected.")
+			};
+			
+			$("#login").click(function(event){
+				data	= {
+					"name"	: $("#name").val(),
+					"action": "login"
+				}
+				ws.send(JSON.stringify(data));
+			});
+			$("#search").click(function(event){
+				data	= {
+					"action": "search"
+				}
+				ws.send(JSON.stringify(data));
+			});
+			$("#cooperate").click(function(event){
+				data	= {
+					"action": "cooperate"
+				}
+				ws.send(JSON.stringify(data));
+			});
+			$("#defect").click(function(event){
+				data	= {
+					"action": "defect"
+				}
+				ws.send(JSON.stringify(data));
+			});
+        </script>
+    </body>
+</html>
