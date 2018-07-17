@@ -7,6 +7,10 @@
 				margin:5px;
 				padding:5px;
 			}
+			p,b{
+				margin:5px;
+				padding:5px;
+			}
 		</style>
     </head>
 	<script src="js/jquery.min.js"></script>
@@ -17,46 +21,66 @@
 		<br />
 		<input id="cooperate" type="button" value="cooperate">
 		<input id="defect" type="button" value="defect">
+		<br />
+		<b id="player">0</b>-<b id="opponent">0</b>
 		<hr />
 		<p id="output"></p>
         <script>
-            var ws = new WebSocket("ws://127.0.0.1:8765/")
-            ws.onopen = function() {
-				console.log("connected")
+			var name	= "";
+			var timer	= + new Date();
+            var ws 		= new WebSocket("ws://127.0.0.1:8765/");
+            ws.onopen 	= function() {
+				console.log("connected");
 			}
-			ws.onmessage = function (event) {
-                data	= JSON.parse(event["data"])
+			ws.onmessage= function (event) {
+				timer	= + new Date();
+                data	= JSON.parse(event["data"]);
 				console.log(data);
-				$("#output").text(data["message"])
+				$("#output").text(data["message"]);
+				if ("data" in data){
+					if ("player" in data["data"]){
+						if ("score" in data["data"]["player"]){
+							$("#player").text(data["data"]["player"]["score"]);
+						}
+					}
+					if ("opponent" in data["data"]){
+						if ("score" in data["data"]["opponent"]){
+							$("#opponent").text(data["data"]["opponent"]["score"]);
+						}
+					}
+
+				}
             };
-			ws.onclose = function(event) { 
+			ws.onclose	= function(event) { 
 				console.log(event);
-				$("#output").text("Server disconnected.")
+				$("#output").text("Server disconnected.");
 			};
 			
 			$("#login").click(function(event){
-				data	= {
+				data		= {
 					"name"	: $("#name").val(),
 					"action": "login"
-				}
+				};
 				ws.send(JSON.stringify(data));
 			});
 			$("#search").click(function(event){
-				data	= {
+				data		= {
 					"action": "search"
-				}
+				};
 				ws.send(JSON.stringify(data));
 			});
 			$("#cooperate").click(function(event){
-				data	= {
-					"action": "cooperate"
-				}
+				data		= {
+					"action": "cooperate",
+					"timer"	: (+ new Date())-timer
+				};
 				ws.send(JSON.stringify(data));
 			});
 			$("#defect").click(function(event){
-				data	= {
-					"action": "defect"
-				}
+				data		= {
+					"action": "defect",
+					"timer"	: (+ new Date())-timer
+				};
 				ws.send(JSON.stringify(data));
 			});
         </script>
