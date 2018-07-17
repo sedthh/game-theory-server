@@ -4,13 +4,24 @@ import json
 import time
 import numpy as np
 import socket
+import codecs
+
+### SETTINGS ###
+
+IP			= "127.0.0.1" #socket.gethostbyname(socket.gethostname())
+HOST		= 8765
+LOG			= "server.log"
+
+################
 
 CONNECTIONS	= {}
 ID			= 0
+GAME		= 0
 
 async def server(websocket, path):
 	global CONNECTIONS
 	global ID
+	global GAME
 	CONNECTIONS[websocket]	= {
 		"id"		: ID,
 		"name"		: "",
@@ -19,6 +30,7 @@ async def server(websocket, path):
 		"bubbling"	: False,		# prevent event bubbling if multiple requests are accidentally sent at once
 		"session"	: time.time(),	# time of connection established
 		"score"		: 0,			# current score
+		"score_all"	: 0,			# all points gained so far
 		"games"		: 0,			# nubmer of games played
 		"choice"	: "",			# either cooperate or defect
 		"duration"	: 0.0,			# time it takes to make a choice
@@ -88,6 +100,7 @@ async def server(websocket, path):
 									break
 							CONNECTIONS[websocket]["searching"]	= False
 							if found:
+								GAME					+= 1
 								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") is challanging "+CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"]+" (id: "+str(CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"])+")")
 								response["message"]		= "Game start."
 								CONNECTIONS[websocket]["score"]=0
@@ -122,7 +135,9 @@ async def server(websocket, path):
 								CONNECTIONS[websocket]["duration"]+= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["duration"]
 								a_score, b_score		= get_game_results(CONNECTIONS[websocket]["choice"], CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"])
 								CONNECTIONS[websocket]["score"]+=a_score
+								CONNECTIONS[websocket]["score_all"]+=a_score
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"]+=b_score
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score_all"]+=b_score
 								CONNECTIONS[websocket]["games"]+=1
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"]+=1
 								response["data"]		= get_data(websocket)
@@ -163,28 +178,30 @@ async def server(websocket, path):
 
 def get_data(websocket):
 	global CONNECTIONS
-	data	= {}
-	data["player"]= {
+	data			= {}
+	data["player"]	= {
 		"id"					: CONNECTIONS[websocket]["id"],
 		"name"					: CONNECTIONS[websocket]["name"],
 		"score"					: CONNECTIONS[websocket]["score"],
+		"score_all"				: CONNECTIONS[websocket]["score_all"],
 		"games"					: CONNECTIONS[websocket]["games"],
 		"choice"				: CONNECTIONS[websocket]["choice"],
 		"duration"				: CONNECTIONS[websocket]["duration"],
 		"environment"			: CONNECTIONS[websocket]["environment"],
 	}
 	if CONNECTIONS[websocket]["challanger"]:
-		data["opponent"]= {
+		data["opponent"]	= {
 			"id"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"],
 			"name"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"],
 			"score"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"],
+			"score_all"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score_all"],
 			"games"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"],
 			"choice"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"],
 			"duration"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["duration"],
 			"environment"			: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["environment"],
 		}
 	else:
-		data["opponent"]= {
+		data["opponent"]	= {
 		}
 	return data
 		
@@ -215,15 +232,23 @@ def get_game_results(a,b):
 	return a_score, b_score	
 
 def log(message):
-	print(time.strftime("%H:%M:%S", time.gmtime())+" > "+str(message))
+	global LOG
+	print(time.strftime("%H:%M:%S")+" > "+str(message))
+	f		= codecs.open(LOG,"a+",encoding="utf-8")
+	f.write(time.strftime('%Y-%m-%d %H:%M:%S')+"\t"+str(message))
+	f.write("\r\n")
+	f.close()
 
 def save(data):
-	return
+	if "data" in data:
+		data	= data["data"]
+		if "opponent" in data and data["opponent"]:
+			global GAME
+			timestamp	= time.strftime('%Y-%m-%d %H:%M:%S')
+			# TODO: save to sql
 	
 if __name__ == "__main__":
-	ip		= "127.0.0.1" #socket.gethostbyname(socket.gethostname())
-	host	= 8765
-	log("Server started at "+ip+":"+str(host))
-	service = websockets.serve(server, ip, host)
+	log("Server started at "+IP+":"+str(HOST))
+	service = websockets.serve(server, IP, HOST)
 	asyncio.get_event_loop().run_until_complete(service)
 	asyncio.get_event_loop().run_forever()
