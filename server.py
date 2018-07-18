@@ -5,12 +5,13 @@ import time
 import numpy as np
 import socket
 import codecs
+from os import path
 
 ### SETTINGS ###
 
 IP			= "127.0.0.1" #socket.gethostbyname(socket.gethostname())
-HOST		= 8765
-LOG			= "server.log"
+PORT		= 8765
+LOG			= path.join("\\".join(path.realpath(__file__).split("\\")[:-1]), 'log','server.log')
 
 ################
 
@@ -31,7 +32,9 @@ async def server(websocket, path):
 		"session"	: time.time(),	# time of connection established
 		"score"		: 0,			# current score
 		"score_all"	: 0,			# all points gained so far
-		"games"		: 0,			# nubmer of games played
+		"score_inc"	: 0,			# score received by either cooperating or defecting
+		"games"		: 0,			# nubmer of games played agains opposition
+		"games_all"	: 0,			# nubmer of games played total
 		"choice"	: "",			# either cooperate or defect
 		"duration"	: 0.0,			# time it takes to make a choice
 		"environment": {}			# how the enviroment should be rendered
@@ -50,11 +53,12 @@ async def server(websocket, path):
 			response	= {
 				"message"	: "Connected.",
 				"error"		: False,
+				"in_game"	: False,
 				"data"		: get_data(websocket),
 				"timestamp"	: time.time()
 			}
 			if "timer" in data:
-				CONNECTIONS[websocket]["duration"]= float(data["timer"])							
+				CONNECTIONS[websocket]["duration"]+= float(data["timer"])							
 			if "action" in data:
 				if data["action"] == "ping":
 					response["message"]= "pong"
@@ -103,8 +107,13 @@ async def server(websocket, path):
 								GAME					+= 1
 								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") is challanging "+CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"]+" (id: "+str(CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"])+")")
 								response["message"]		= "Game start."
+								response["in_game"]		= True
+								CONNECTIONS[websocket]["duration"]=0.0
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["duration"]=0.0
 								CONNECTIONS[websocket]["score"]=0
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"]=0
+								CONNECTIONS[websocket]["games"]=0
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"]=0
 								env						= get_game_environment()
 								CONNECTIONS[websocket]["environment"]= env.copy()
 								env["seat"]	= not env["seat"]
@@ -119,27 +128,33 @@ async def server(websocket, path):
 								response["error"]		= True
 								await websocket.send(json.dumps(response))
 						else:
-							response["message"]	= "You are already in a game session."
-							response["data"]	= get_data(websocket)
+							response["message"]		= "You are already in a game session."
+							response["in_game"]		= True
+							response["data"]		= get_data(websocket)
 							await websocket.send(json.dumps(response))
 					else:
-						response["message"]	= "You have to log in first."
-						response["error"]	= True
+						response["message"]		= "You have to log in first."
+						response["error"]		= True
 						await websocket.send(json.dumps(response))		
 				elif data["action"] == "cooperate" or data["action"] == "defect":
 					if CONNECTIONS[websocket]["name"]:
 						if CONNECTIONS[websocket]["challanger"]:
-							CONNECTIONS[websocket]["choice"]	= data["action"]
+							response["in_game"]		= True
+							CONNECTIONS[websocket]["choice"]= data["action"]
 							if CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"]:
 								# GAME LOGIC
 								CONNECTIONS[websocket]["duration"]+= CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["duration"]
 								a_score, b_score		= get_game_results(CONNECTIONS[websocket]["choice"], CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"])
 								CONNECTIONS[websocket]["score"]+=a_score
 								CONNECTIONS[websocket]["score_all"]+=a_score
+								CONNECTIONS[websocket]["score_inc"]=a_score
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"]+=b_score
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score_all"]+=b_score
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score_inc"]=b_score
 								CONNECTIONS[websocket]["games"]+=1
+								CONNECTIONS[websocket]["games_all"]+=1
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"]+=1
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games_all"]+=1
 								response["data"]		= get_data(websocket)
 								response["message"]		= "Game set."
 								await websocket.send(json.dumps(response))
@@ -149,6 +164,8 @@ async def server(websocket, path):
 								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"] = ""
 								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") VS "+CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"]+" (id: "+str(CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"])+"): "+str(a_score)+"-"+str(b_score))
 								save(response)
+								CONNECTIONS[websocket]["duration"]=0.0
+								CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["duration"]=0.0
 								# END OF GAME LOGIC
 							else:
 								response["message"]		= CONNECTIONS[websocket]["name"]+" has chosen."
@@ -167,6 +184,7 @@ async def server(websocket, path):
 		for socket, data in CONNECTIONS.items():
 			if "challanger" in data and data["challanger"] and data["challanger"]==websocket:
 				response["message"]		= "Player has disconnceted."
+				response["in_game"]		= False
 				response["error"]		= True
 				response["data"]["opponent"]={}
 				CONNECTIONS[socket]["challanger"]= None
@@ -184,7 +202,9 @@ def get_data(websocket):
 		"name"					: CONNECTIONS[websocket]["name"],
 		"score"					: CONNECTIONS[websocket]["score"],
 		"score_all"				: CONNECTIONS[websocket]["score_all"],
+		"score_inc"				: CONNECTIONS[websocket]["score_inc"],
 		"games"					: CONNECTIONS[websocket]["games"],
+		"games_all"				: CONNECTIONS[websocket]["games_all"],
 		"choice"				: CONNECTIONS[websocket]["choice"],
 		"duration"				: CONNECTIONS[websocket]["duration"],
 		"environment"			: CONNECTIONS[websocket]["environment"],
@@ -195,7 +215,9 @@ def get_data(websocket):
 			"name"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"],
 			"score"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score"],
 			"score_all"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score_all"],
+			"score_inc"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["score_inc"],
 			"games"					: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games"],
+			"games_all"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["games_all"],
 			"choice"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["choice"],
 			"duration"				: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["duration"],
 			"environment"			: CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["environment"],
@@ -248,7 +270,7 @@ def save(data):
 			# TODO: save to sql
 	
 if __name__ == "__main__":
-	log("Server started at "+IP+":"+str(HOST))
-	service = websockets.serve(server, IP, HOST)
+	log("Server started at "+IP+":"+str(PORT))
+	service = websockets.serve(server, IP, PORT)
 	asyncio.get_event_loop().run_until_complete(service)
 	asyncio.get_event_loop().run_forever()

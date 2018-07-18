@@ -11,26 +11,79 @@
 				margin:5px;
 				padding:5px;
 			}
+			.choice{
+				border:5px solid #cccccc;
+				transition:border-color .2s;
+				-webkit-transition:border-color .2s;
+				padding:5px;
+				font-size:20px;
+			}
+			.select{
+				border:5px solid #00ff00;
+			}
+			.player_select{
+				border:5px solid #00ff00;	
+				border-top:5px solid #00ff00 !important;
+				border-left:5px solid #00ff00 !important;
+			}
+			.opponent_select{
+				border:5px solid #ff0000;
+			}
+			.menu{
+				display:none;
+				margin:auto;
+				text-align:center;
+				width:300px;
+				position:relative;
+			}
+			.menu_won{
+				background-color:#ddffdd;
+			}
+			.menu_lost{
+				background-color:#ffdddd;
+			}
+			.menu_tie{
+				background-color:#ffffdd;
+			}
+			#cooperate{
+				background-color:#ccddcc;
+			}
+			#defect{
+				background-color:#ddcccc;
+			}
+			#output{
+				text-align:center;
+			}
 		</style>
     </head>
 	<script src="js/jquery.min.js"></script>
     <body>
-		<input id="name" type="text" value="Tibi">
-		<input id="login" type="button" value="login">
-		<input id="search" type="button" value="search">
-		<br />
-		<input id="cooperate" type="button" value="cooperate">
-		<input id="defect" type="button" value="defect">
-		<br />
-		<b id="player">0</b>-<b id="opponent">0</b>
-		<hr />
-		<p id="output"></p>
+		<div id="menu_login" class="menu">
+			<input id="name" type="text" value="Tibi" placeholder="Please enter your name">
+			<input id="login" type="button" value="Connect">
+		</div>
+		<div id="menu_search" class="menu">
+			<input id="search" type="button" value="Join a game">
+		</div>
+		<div id="menu_game" class="menu">
+			<input id="cooperate" type="button" value="+" class="choice">
+			<input id="defect" type="button" value="-" class="choice">
+			<br />
+			<b id="player_name">Anonymous</b>-<b id="opponent_name">Anonymous</b>
+			<br />
+			<b id="player_score">0</b>-<b id="opponent_score">0</b>
+			<hr />
+		</div>
+		<p id="output">Connecting...</p>
         <script>
 			var name	= "";
 			var timer	= + new Date();
             var ws 		= new WebSocket("ws://127.0.0.1:8765/");
+			var lastScore=0;
+			var lastClick=false;
             ws.onopen 	= function() {
-				console.log("connected");
+				$("#menu_login").show();
+				$("#output").text("");
 			}
 			ws.onmessage= function (event) {
 				timer	= + new Date();
@@ -38,22 +91,73 @@
 				console.log(data);
 				$("#output").text(data["message"]);
 				if ("data" in data){
+					var checkScore	= 0;
 					if ("player" in data["data"]){
+						if ("name" in data["data"]["player"]){
+							$("#player_name").text(data["data"]["player"]["name"]);
+						}
 						if ("score" in data["data"]["player"]){
-							$("#player").text(data["data"]["player"]["score"]);
+							$("#player_score").text(data["data"]["player"]["score"]);
+							checkScore	+= data["data"]["player"]["score"];
 						}
 					}
 					if ("opponent" in data["data"]){
+						if ("name" in data["data"]["opponent"]){
+							$("#opponent_name").text(data["data"]["opponent"]["name"]);
+						}
 						if ("score" in data["data"]["opponent"]){
-							$("#opponent").text(data["data"]["opponent"]["score"]);
+							$("#opponent_score").text(data["data"]["opponent"]["score"]);
+							checkScore	+= data["data"]["opponent"]["score"];
 						}
 					}
-
+					if (!lastClick){
+						$(".choice").removeClass("select").removeClass("player_select").removeClass("opponent_select");
+					}else{
+						lastClick	= false;
+					}
+					if (checkScore!=lastScore){
+						lastScore	= checkScore;
+						$(".choice").removeClass("select").prop("disabled",true);
+						if (data["data"]["player"]["choice"]=="cooperate"){
+							$("#cooperate").addClass("player_select");
+						}else{
+							$("#defect").addClass("player_select");
+						}
+						if (data["data"]["opponent"]["choice"]=="cooperate"){
+							$("#cooperate").addClass("opponent_select");
+						}else{
+							$("#defect").addClass("opponent_select");
+						}
+						if (data["data"]["player"]["score_inc"]>data["data"]["opponent"]["score_inc"]){
+							$("#menu_game").addClass("menu_won");
+						}else if (data["data"]["player"]["score_inc"]<data["data"]["opponent"]["score_inc"]){
+							$("#menu_game").addClass("menu_lost");
+						}else{
+							$("#menu_game").addClass("menu_tie");
+						}
+						setTimeout(function(){
+							$("#menu_game").removeClass("menu_won").removeClass("menu_lost").removeClass("menu_tie");
+							$(".choice").removeClass("select").removeClass("player_select").removeClass("opponent_select").prop("disabled",false);
+						},1500);
+					}
+					if (data["error"]){
+						lastScore	= 0;
+					}
+					$(".menu").hide();
+					if (data["in_game"]){
+						$("#menu_game").show();	
+					}else{
+						$("#menu_search").show();
+						$("#search").prop("disabled",false);
+						lastScore	= 0;
+					}
+					
 				}
             };
 			ws.onclose	= function(event) { 
-				console.log(event);
+				$(".menu").hide();
 				$("#output").text("Server disconnected.");
+				console.log(event);
 			};
 			
 			$("#login").click(function(event){
@@ -61,26 +165,33 @@
 					"name"	: $("#name").val(),
 					"action": "login"
 				};
-				ws.send(JSON.stringify(data));
+				ws.send(JSON.stringify(data));		
 			});
 			$("#search").click(function(event){
+				$(this).prop( "disabled",true);
 				data		= {
 					"action": "search"
 				};
 				ws.send(JSON.stringify(data));
 			});
-			$("#cooperate").click(function(event){
+			$("#cooperate").click(function(event){;
+				$(".choice").removeClass("select").removeClass("player_select").removeClass("opponent_select");
+				$(this).addClass("select");	
 				data		= {
 					"action": "cooperate",
 					"timer"	: (+ new Date())-timer
 				};
+				lastClick	= true;
 				ws.send(JSON.stringify(data));
 			});
 			$("#defect").click(function(event){
+				$(".choice").removeClass("select").removeClass("player_select").removeClass("opponent_select");
+				$(this).addClass("select");	
 				data		= {
 					"action": "defect",
 					"timer"	: (+ new Date())-timer
 				};
+				lastClick	= true;
 				ws.send(JSON.stringify(data));
 			});
         </script>
