@@ -81,12 +81,17 @@
             var ws 		= new WebSocket("ws://127.0.0.1:8765/");
 			var lastScore=0;
 			var lastClick=false;
+			var ping	= 0;
             ws.onopen 	= function() {
 				$("#menu_login").show();
 				$("#output").text("");
 			}
 			ws.onmessage= function (event) {
-				timer	= + new Date();
+				timer	= (+ new Date());
+				if (ping){
+					console.log(timer-ping);
+					ping	= 0;
+				}
                 data	= JSON.parse(event["data"]);
 				console.log(data);
 				$("#output").text(data["message"]);
@@ -165,14 +170,14 @@
 					"name"	: $("#name").val(),
 					"action": "login"
 				};
-				ws.send(JSON.stringify(data));		
+				send(data);	
 			});
 			$("#search").click(function(event){
 				$(this).prop( "disabled",true);
 				data		= {
 					"action": "search"
 				};
-				ws.send(JSON.stringify(data));
+				send(data);
 			});
 			$("#cooperate").click(function(event){;
 				$(".choice").removeClass("select").removeClass("player_select").removeClass("opponent_select");
@@ -182,7 +187,7 @@
 					"timer"	: (+ new Date())-timer
 				};
 				lastClick	= true;
-				ws.send(JSON.stringify(data));
+				send(data);
 			});
 			$("#defect").click(function(event){
 				$(".choice").removeClass("select").removeClass("player_select").removeClass("opponent_select");
@@ -192,8 +197,12 @@
 					"timer"	: (+ new Date())-timer
 				};
 				lastClick	= true;
-				ws.send(JSON.stringify(data));
+				send(data);
 			});
+			function send(data){
+				ping	= (+ new Date());
+				ws.send(JSON.stringify(data));
+			}
         </script>
     </body>
 </html>

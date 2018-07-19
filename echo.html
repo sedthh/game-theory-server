@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Python Websocket Client</title>
+		<style>
+			#main{
+				display:block;
+				margin:auto;
+			}
+			.headset{
+				width:100px;
+				height:100px;
+				display:inline-block;
+				margin:50px;
+				padding:50px;
+				background-color:#ff0000;
+			}
+			#player{
+				background-color:#00ff00;
+			}
+			#ping{
+				text-align:center;
+				width:100%;
+				font-size:20px;
+			}
+		</style>
+    </head>
+	<script src="js/jquery.min.js"></script>
+    <body>
+		<div id="main">
+			<div id="player" class="headset">
+			</div>
+			<div id="echo" class="headset">
+			</div>
+		</div>
+		<p id="ping">0</p>
+        <script>
+			var timer	= + new Date();
+            var ws 		= new WebSocket("ws://127.0.0.1:8765/");
+			ping		= 0;
+			maxPing		= 0;
+            ws.onopen 	= function() {
+				requestAnimationFrame(rotateHeadset);
+			}
+			ws.onmessage= function (event) {
+				timer	= (+ new Date());
+                data	= JSON.parse(event["data"]);
+				rotation= data["transform"]["rot"]["x"];
+				$("#echo").css({"transform":"rotate("+rotation+"deg)"});
+				if (ping){
+					ping	= timer-ping;
+					if (ping>maxPing){
+						maxPing	= ping;
+						console.log(maxPing);
+					}
+					$("#ping").text(ping);
+					ping	= 0;
+				}
+            };
+			ws.onclose	= function(event) { 
+				console.log(event);
+			};
+			
+			function send(rotation){
+				ping	= (+ new Date());
+				data	= {
+					"transform"	: {
+						"pos"		: {	
+							"x"	: 0.0,
+							"y"	: 0.0,
+							"z"	: 0.0
+						},
+						"rot"		: {
+							"x"	: rotation,
+							"y"	: 0.0,
+							"z"	: 0.0
+						}
+					}
+				}
+				ws.send(JSON.stringify(data));
+			}
+			
+			rotation	= 0.0;
+			function rotateHeadset() {
+				rotation+=.1;
+				$("#player").css({"transform":"rotate("+rotation+"deg)"});
+				send(rotation);
+				requestAnimationFrame(rotateHeadset);
+			}
+        </script>
+    </body>
+</html>

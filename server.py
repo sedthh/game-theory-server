@@ -37,7 +37,19 @@ async def server(websocket, path):
 		"games_all"	: 0,			# nubmer of games played total
 		"choice"	: "",			# either cooperate or defect
 		"duration"	: 0.0,			# time it takes to make a choice
-		"environment": {}			# how the enviroment should be rendered
+		"environment": {},			# how the enviroment should be rendered
+		"transform"	: {				# position of headset if available
+			"pos"		: {	
+				"x"	: 0.0,
+				"y"	: 0.0,
+				"z"	: 0.0
+			},
+			"rot"		: {
+				"x"	: 0.0,
+				"y"	: 0.0,
+				"z"	: 0.0
+			}
+		}
 	}
 	ID			+= 1
 	try:
@@ -47,22 +59,40 @@ async def server(websocket, path):
 		log(ip+" connected ("+str(len(CONNECTIONS))+")")
 		while True:
 			data		= json.loads(await websocket.recv())
-			if CONNECTIONS[websocket]["searching"] or CONNECTIONS[websocket]["bubbling"]:
-				return
-			CONNECTIONS[websocket]["bubbling"]= True
-			response	= {
-				"message"	: "Connected.",
-				"error"		: False,
-				"in_game"	: False,
-				"data"		: get_data(websocket),
-				"timestamp"	: time.time()
-			}
+			# send client's headset coordinates to their opponent
+			if "transform" in data and CONNECTIONS[websocket]["challanger"]:
+				if "pos" in data["transform"]:
+					CONNECTIONS[websocket]["transform"]["pos"]	= data["transform"]["pos"]
+				if "rot" in data["transform"]:
+					CONNECTIONS[websocket]["transform"]["rot"]	= data["transform"]["rot"]
+				response	= {
+					"type"		: "transform",
+					"id"		: CONNECTIONS[websocket]["id"],
+					"transform"	: CONNECTIONS[websocket]["transform"],
+					"timestamp"	: time.time()
+				}
+				await CONNECTIONS[websocket]["challanger"].send(json.dumps(response))
+			# measure duration of choices
 			if "timer" in data:
-				CONNECTIONS[websocket]["duration"]+= float(data["timer"])							
+				CONNECTIONS[websocket]["duration"]+= float(data["timer"])	
+			# prevent bubbling if multiple actions are sent
+			if CONNECTIONS[websocket]["searching"] or CONNECTIONS[websocket]["bubbling"]:
+				continue
+			# handle actions from client
 			if "action" in data:
+				CONNECTIONS[websocket]["bubbling"]= True
+				response	= {
+					"type"		: "action",
+					"message"	: "Connected.",
+					"error"		: False,
+					"in_game"	: False,
+					"data"		: get_data(websocket),
+					"timestamp"	: time.time()
+				}
 				if data["action"] == "ping":
 					response["message"]= "pong"
 					await websocket.send(json.dumps(response))
+				# player provides a username
 				elif data["action"] == "login":
 					if not CONNECTIONS[websocket]["name"]:
 						if "name" in data and data["name"]:
@@ -76,6 +106,7 @@ async def server(websocket, path):
 						response["message"]	= "You are already logged in."
 						response["error"]	= True
 						await websocket.send(json.dumps(response))	
+				# player looking for a match
 				elif data["action"] == "search":
 					if CONNECTIONS[websocket]["name"]:
 						if not CONNECTIONS[websocket]["challanger"]:
@@ -103,6 +134,7 @@ async def server(websocket, path):
 								if not CONNECTIONS[websocket]["bubbling"]:
 									break
 							CONNECTIONS[websocket]["searching"]	= False
+							# match found
 							if found:
 								GAME					+= 1
 								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") is challanging "+CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["name"]+" (id: "+str(CONNECTIONS[CONNECTIONS[websocket]["challanger"]]["id"])+")")
@@ -122,6 +154,7 @@ async def server(websocket, path):
 								await websocket.send(json.dumps(response))
 								response["data"]["player"], response["data"]["opponent"] = response["data"]["opponent"], response["data"]["player"]
 								await CONNECTIONS[websocket]["challanger"].send(json.dumps(response))
+							# no match found
 							elif not CONNECTIONS[websocket]["challanger"]:
 								log(CONNECTIONS[websocket]["name"]+" (id: "+str(CONNECTIONS[websocket]["id"])+") could not find a challanger.")
 								response["message"]		= "No players found."
@@ -136,6 +169,7 @@ async def server(websocket, path):
 						response["message"]		= "You have to log in first."
 						response["error"]		= True
 						await websocket.send(json.dumps(response))		
+				# selecting either cooperate or defect
 				elif data["action"] == "cooperate" or data["action"] == "defect":
 					if CONNECTIONS[websocket]["name"]:
 						if CONNECTIONS[websocket]["challanger"]:
@@ -178,9 +212,10 @@ async def server(websocket, path):
 					else:
 						response["message"]	= "You have to log in and join a game session first."
 						response["error"]	= True
-						await websocket.send(json.dumps(response))	
+						await websocket.send(json.dumps(response))
 			CONNECTIONS[websocket]["bubbling"]= False
 	except websockets.ConnectionClosed:
+		# user closes connection, close game they were in
 		for socket, data in CONNECTIONS.items():
 			if "challanger" in data and data["challanger"] and data["challanger"]==websocket:
 				response["message"]		= "Player has disconnceted."
@@ -228,6 +263,7 @@ def get_data(websocket):
 	return data
 		
 def get_game_environment():
+	# generate random game environment for players
 	return {
 		"stage"			: np.random.choice(["default","pleasant","unpleasant"]),
 		"rotation"		: int(np.random.choice([0,90,180,270])),
@@ -237,6 +273,7 @@ def get_game_environment():
 def get_game_results(a,b):
 	a_score	= 0
 	b_score	= 0
+	# payoff matrix
 	if a=="cooperate":
 		if b=="cooperate":
 			a_score	= 3
@@ -274,3 +311,4 @@ if __name__ == "__main__":
 	service = websockets.serve(server, IP, PORT)
 	asyncio.get_event_loop().run_until_complete(service)
 	asyncio.get_event_loop().run_forever()
+	
