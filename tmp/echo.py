@@ -52,7 +52,12 @@ async def server(websocket, path):
 					"transform"	: CONNECTIONS[websocket]["transform"],
 					"timestamp"	: time.time()
 				}
-				await websocket.send(json.dumps(response))			
+				await websocket.send(json.dumps(response))
+			elif "message" in data:
+				response	= {
+					"message"	: data["message"]
+				}				
+				await websocket.send(json.dumps(response))
 	except websockets.ConnectionClosed:
 		log(ip+" disconnected ("+str(len(CONNECTIONS))+")")
 	finally:

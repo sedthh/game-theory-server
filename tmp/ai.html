@@ -40,13 +40,14 @@
 			ping		= 0;
 			maxPing		= 0;
             ws.onopen 	= function() {
-				requestAnimationFrame(rotateHeadset);
+				send()
 			}
 			ws.onmessage= function (event) {
 				timer	= (+ new Date());
                 data	= JSON.parse(event["data"]);
-				rotation= data["transform"]["rot"]["x"];
-				$("#echo").css({"transform":"rotate("+rotation+"deg)"});
+				if ("game" in data){
+					console.log(data["game"])
+				}
 				if (ping){
 					ping	= timer-ping;
 					if (ping>maxPing){
@@ -61,32 +62,16 @@
 				console.log(event);
 			};
 			
-			function send(rotation){
+			function send(){
 				ping	= (+ new Date());
 				data	= {
-					"transform"	: {
-						"pos"		: {	
-							"x"	: 0.0,
-							"y"	: 0.0,
-							"z"	: 0.0
-						},
-						"rot"		: {
-							"x"	: rotation,
-							"y"	: 0.0,
-							"z"	: 0.0
-						}
-					}
+					"type" : "EXPERIMENTER",
+					"ready" : true,
+
 				}
 				ws.send(JSON.stringify(data));
 			}
-			
-			rotation	= 0.0;
-			function rotateHeadset() {
-				rotation+=.1;
-				$("#player").css({"transform":"rotate("+rotation+"deg)"});
-				send(rotation);
-				requestAnimationFrame(rotateHeadset);
-			}
+
         </script>
     </body>
 </html>

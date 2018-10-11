@@ -1,0 +1,38 @@
+Research process:
+- Research subjects will fill out forms on taking part in the experiment and introduced to the idea
+- Research subjects will give their information, and receive an ID, so all their data will be connected to the same ID throughout all the different sessions
+- Research subjects will be able to select their avatar from a list of avatars (don't want to let them create one because it could take way too long)
+- Players are given the options to either cooperate or defect. Their choice will increase their score depending on the choice of the opponent. 
+- 2 player games (two people will take part in the experiment at the same time, although the engine allows more)
+- Players start the session outside of VR by either seeing their opponent or not
+- Players will get into VR and play multiple sessions there, at random places against random avatars
+- Players end the session outside of VR by either seeing their opponent or not (opposite of how they have started the session)
+- Research subjects will be told the entire truth about the experiment and asked further questions
+
+Random places (with random rotations 0-360 degree) (random order):
+- A place that looks similar to the real life research environment
+- A videogame environment that looks artificial
+- A pleasant scenairo (for example: a beach)
+- An unpleasant scenairo (for example: a factory)
+- An actual prison
+- Inside a church
+
+Random avatars (random order, after random waiting time):
+- The avatar selected by the opponent (once)
+- The avatar selected by the user (once)
+- An avatar that is just a sphere/headset without eyes (once)
+- Rest of the avatars should be also human like, they can be repeatedly chosen (male and female, all white because diversity in Hungary would give away the fake avatars)
+
+All sessions will last for random 3-5 games (length unknown to players). 
+Places can change during games (you can play a session against someone and have the environment change after the results are in). 
+
+Players will see (1) their own total score and (2) the score received during the current session by both the player and their opponent.
+The choice of the opponent must also be visibly signaled to the player. 
+The outcome of the choices must also be visibly signaled to the player (opponent choice + your choice = result --> points increase this way).
+Give them some time to look around when a new random place or new opponenet appears.
+
+The first VR session should include some kind of basic tutorial on how to select your choice.
+A loading message needs to be shown while the player is looking for a partner
+
+
+Could do: animal avatars and cosmetics
