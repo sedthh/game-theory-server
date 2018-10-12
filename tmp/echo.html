@@ -48,11 +48,6 @@
 				if ("transform" in data){
 					rotation= data["transform"]["rot"]["x"];
 					$("#echo").css({"transform":"rotate("+rotation+"deg)"});
-				}else if ("message" in data){
-					console.log(data["message"])
-				}
-				if ("game" in data){
-					console.log(data["game"])
 				}
 				if (ping){
 					ping	= timer-ping;
