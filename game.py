@@ -6,7 +6,7 @@ from numpy import random
 from sys import exit
 from copy import deepcopy
 
-STRATEGIES = ["COOPERATE", "DEFECT", "RANDOM", "TIT-FOR-TAT", "ALTERNATING"]
+STRATEGIES = ("COOPERATE", "DEFECT", "RANDOM", "TIT-FOR-TAT", "ALTERNATING")
 STRATEGY = "RANDOM"
 SUBJECT_CHOICES = []
 EXPERIMENTER_CHOICES = []
@@ -37,7 +37,7 @@ def get_settings(file):
 				ip = settings["SERVER"]["IP"]
 				port = int(settings["SERVER"]["PORT"])
 				log_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), settings["SERVER"]["LOG_FILE"])
-				wait = settings["SERVER"]["WAIT"]
+				wait = int(settings["SERVER"]["WAIT"])
 				games = int(settings["SERVER"]["MAX_GAMES_BEFORE"]) + int(settings["SERVER"]["MAX_GAMES_VR"]) + int(settings["SERVER"]["MAX_GAMES_AFTER"])
 				get_data(file)
 				return ip, port, log_file, wait, games
@@ -99,19 +99,35 @@ def get_test(subject, experimenter, game=0):
 	experimenter["data"]["environment"] = game_data["environment"]
 	subject["data"]["rotation"] = game_data["rotation"]
 	experimenter["data"]["rotation"] = (game_data["rotation"]+180)%360
-	experimenter["data"]["name"] = game_data["name"]
-	experimenter["data"]["avatar"] = game_data["avatar"]
+	# Don't overwrite for first and last games:
+	if game < MAX_GAMES_BEFORE or game > MAX_GAMES_BEFORE+MAX_GAMES_VR:
+		is_vr = False
+	else:
+		is_vr = True
+	if is_vr:
+		experimenter["data"]["name"] = game_data["name"]
+		experimenter["data"]["avatar"] = game_data["avatar"]
+	subject["data"]["is_vr"] = is_vr
+	experimenter["data"]["is_vr"] = is_vr
 	loading = int(random.choice([1, 2, 3]))
 	subject["data"]["loading"] = loading
 	experimenter["data"]["loading"] = loading
-	subject["data"]["message"] = "Searching for match."
-	experimenter["data"]["message"] = "Searching for match."
-	rounds_to_play = random.randint(3, 8)
-	subject["data"]["game"]["rounds_left"] = rounds_to_play
-	experimenter["data"]["game"]["rounds_left"] = rounds_to_play
+	subject["data"]["message"] = "Game started!"
+	experimenter["data"]["message"] = "Game started!"
+	rounds_to_play = random.randint(3, 4)  # 3,8
 	subject["data"]["choice"] = ""
 	experimenter["data"]["choice"] = ""
-	return subject, experimenter
+	subject["data"]["game"]["rounds_left"] = rounds_to_play
+	experimenter["data"]["game"]["rounds_left"] = rounds_to_play
+	subject["data"]["game"]["SUBJECT"]["choice"] = ""
+	subject["data"]["game"]["SUBJECT"]["score"] = 0
+	subject["data"]["game"]["EXPERIMENTER"]["choice"] = ""
+	subject["data"]["game"]["EXPERIMENTER"]["score"] = 0
+	experimenter["data"]["game"]["SUBJECT"]["choice"] = ""
+	experimenter["data"]["game"]["SUBJECT"]["score"] = 0
+	experimenter["data"]["game"]["EXPERIMENTER"]["choice"] = ""
+	experimenter["data"]["game"]["EXPERIMENTER"]["score"] = 0
+	return deepcopy_fix(subject), deepcopy_fix(experimenter)
 
 def play_once(subject, experimenter):
 	global SUBJECT_CHOICES, EXPERIMENTER_CHOICES
@@ -120,7 +136,7 @@ def play_once(subject, experimenter):
 
 	subject_score, experimenter_score = get_game_results(subject["data"]["choice"], experimenter["data"]["choice"])
 	game = {
-		"rounds_left": max(subject["data"]["game"]["rounds_left"],experimenter["data"]["game"]["rounds_left"])-1,
+		"rounds_left": max(subject["data"]["game"]["rounds_left"], experimenter["data"]["game"]["rounds_left"])-1,
 		"SUBJECT": {
 			"choice": subject["data"]["choice"],
 			"score": subject["data"]["game"]["SUBJECT"]["score"]+subject_score,
@@ -134,8 +150,17 @@ def play_once(subject, experimenter):
 	}
 	subject["data"]["choice"] = ""
 	experimenter["data"]["choice"] = ""
-	subject["data"]["game"] = deepcopy(game)
-	experimenter["data"]["game"] = deepcopy(game)
+	subject["data"]["game"] = game
+	experimenter["data"]["game"] = game
+	return deepcopy_fix(subject), deepcopy_fix(experimenter)
+
+def end_test(subject, experimenter):
+	subject["data"]["message"] = "Session ended."
+	experimenter["data"]["message"] = "Session ended."
+	subject["data"]["is_over"] = True
+	experimenter["data"]["is_over"] = True
+	subject["data"]["loading"] = 3
+	experimenter["data"]["loading"] = 3
 	return subject, experimenter
 
 def get_game_results(a, b):
@@ -173,9 +198,14 @@ def get_choice():
 			else:
 				return "cooperate"
 		else:
-			return "cooperate"
+			return random.choice(["cooperate", "defect"])
 	else:
 		return random.choice(["cooperate", "defect"])
+
+def deepcopy_fix(item):
+	new_item = item
+	new_item["data"] = deepcopy(item["data"])
+	return new_item
 
 if __name__ == "__main__":
 	_,_,_,_,_ =get_settings("settings.ini")

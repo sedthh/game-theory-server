@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Python Websocket Client</title>
+		<style>
+			input{
+				margin:5px;
+				padding:5px;
+			}
+			p,b{
+				margin:5px;
+				padding:5px;
+			}
+			.menu{
+				display:none;
+				margin:auto;
+				text-align:center;
+				width:300px;
+				position:relative;
+			}
+			.menu_won{
+				background-color:#ddffdd;
+			}
+			.menu_lost{
+				background-color:#ffdddd;
+			}
+			.menu_tie{
+				background-color:#ffffdd;
+			}
+			#cooperate{
+				background-color:#ccddcc;
+			}
+			#defect{
+				background-color:#ddcccc;
+			}
+			#output{
+				text-align:center;
+			}
+		</style>
+    </head>
+	<script src="tmp/js/jquery.min.js"></script>
+    <body>
+		<div id="menu_login" class="menu">
+			<input id="name" type="text" value="Tibi" placeholder="Please enter your name" />
+			<input id="avatar" type="text" value="Aang" placeholder="Please enter your avatar" />
+			<input id="login" type="button" value="Connect" />
+		</div>
+		<div id="menu_start" class="menu">
+			<input id="ready" type="button" value="Look for match" />
+		</div>
+		<div id="game" class="menu">
+			<input id="cooperate" type="button" value="+" class="choice">
+			<input id="defect" type="button" value="-" class="choice">
+			<br />
+			Playing against <b id="opponent_name">Anonymous</b>
+			<br />
+			<b id="player_score">0</b>-<b id="opponent_score">0</b>
+		</div>
+		<hr />
+		<p id="output">Connecting...</p>
+        <script>
+			var name = "";
+			var avatar = "";
+			var timer = + new Date();
+            var ws = new WebSocket("ws://192.168.10.104:8765/");
+			var ping = 0;
+			var inGame = false;
+			var isSubject = false;
+
+            ws.onopen = function() {
+				$("#menu_login").show();
+				$("#output").hide();
+				inGame = false;
+			};
+
+			ws.onmessage = function (event) {
+                data = JSON.parse(event["data"]);
+				if ("message" in data){
+					timer = (+ new Date());
+					if (ping){
+						console.log(timer-ping);
+					}
+					$("#output").text(data["message"]);
+				}
+				if ("game" in data){
+					setupGame(data);
+				}
+				ping = 0;
+            };
+
+			ws.onclose = function(event) {
+				$("#output").text("Server disconnected.");
+				console.log(event);
+				inGame = false;
+			};
+			
+			$("#login").mousedown(function(event){
+				name = $("#name").val();
+				avatar = $("#avatar").val();
+				isSubject = (event.which!=3);
+				data = {
+					"name": name,
+					"avatar": avatar,
+					"type": (isSubject?"SUBJECT":"EXPERIMENTER")
+				};
+				$("#menu_login").hide();
+				$("#menu_start").show();
+				$("#output").show();
+				send(data);
+				inGame = true;
+			});
+
+			$("#ready").mousedown(function(event){
+				data = {
+					"ready": true
+				}
+				$("#menu_start").hide();
+				send(data);
+			});
+
+			$("#cooperate").click(function(event){
+				data = {
+					"choice": "cooperate"
+				}
+				send(data);
+			});
+
+			$("#defect").click(function(event){
+				data = {
+					"choice": "defect"
+				}
+				send(data);
+			});
+
+
+			function setupGame(data){
+				console.log(data);
+				setTimeout(function(data){
+					if (data["is_vr"] && false){
+						$("#game").hide();
+						$("#output").html("Your next session will be in VR");
+					}else if (data["is_over"]){
+						$("#game").hide();
+						$("#output").html("Thank you for playing!");
+					}else{
+						$("#game").show();
+						//$("#player_name").html(name);
+						$("#opponent_name").html(data["name"]);
+						if (isSubject){
+							$("#player_score").html(data["game"]["SUBJECT"]["score"])
+							$("#opponent_score").html(data["game"]["EXPERIMENTER"]["score"])
+						}else{
+							$("#player_score").html(data["game"]["EXPERIMENTER"]["score"])
+							$("#opponent_score").html(data["game"]["SUBJECT"]["score"])
+						}
+					}
+				},data["loading"]*1000,data);
+			}
+
+			function send(data){
+				ping = (+ new Date());
+				ws.send(JSON.stringify(data));
+			};
+        </script>
+    </body>
+</html>

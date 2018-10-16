@@ -5,6 +5,7 @@ import websockets
 import time
 import codecs
 import json
+from copy import deepcopy
 
 import game
 SETTINGS = "settings.ini"
@@ -20,10 +21,9 @@ def log(message):
 ##########
 
 async def vr_server(websocket, path):
-	global CONNECTIONS, READY, GAMES_PLAYED
+	global CONNECTIONS, READY, GAMES_PLAYED, LOCK
 	client_type = "UNKNOWN"
 	client_ip = "0.0.0.0"
-	is_waiting = False
 	if websocket.remote_address:
 		client_ip = str(websocket.remote_address[0])
 	log(f"Incoming connection: {client_ip}")
@@ -49,6 +49,8 @@ async def vr_server(websocket, path):
 							"loading": 0,				# show fake loading for this long
 							"message": "Connected.",	# messages for debugging
 							"choice": "",				# the last sent choice (["game"]["me"]["choice"] will also have its value)
+							"is_vr": False,				# is current game session a VR session
+							"is_over": False,			# is game session over
 							"game": {
 								"rounds_left": 0,
 								"SUBJECT": {
@@ -94,11 +96,11 @@ async def vr_server(websocket, path):
 						log(f"Session interrupted, {client_type} is not ready")
 
 			# subject sets name (just save it for later)
-			if "name" in data and client_type in CONNECTIONS:
+			if "name" in data and client_type in CONNECTIONS and data["name"]:
 				CONNECTIONS[client_type]["data"]["name"] = data["name"]
 
 			# subject sets avatar (just save it for later)
-			if "avatar" in data and client_type in CONNECTIONS:
+			if "avatar" in data and client_type in CONNECTIONS and data["avatar"]:
 				CONNECTIONS[client_type]["data"]["avatar"] = data["avatar"]
 
 			# sending headset transform information when received
@@ -109,39 +111,51 @@ async def vr_server(websocket, path):
 
 			# subject sends their choice
 			if "choice" in data and data["choice"] in ("cooperate", "defect") and client_type in CONNECTIONS:
-				if not is_waiting:
-					if READY:
-						# play the game
-						if client_type == "SUBJECT":
-							# subject plays the game
-							CONNECTIONS[client_type]["data"]["choice"] = data["choice"]
-						elif client_type == "EXPERIMENTER":
-							# discard choice and get actual choice from game AI based on selected strategy
-							CONNECTIONS[client_type]["data"]["choice"] = game.get_choice()
-						# calculate results if both players have chosen
-						if "SUBJECT" in CONNECTIONS and "EXPERIMENTER" in CONNECTIONS:
-							if CONNECTIONS["SUBJECT"]["data"]["game"]["SUBJECT"]["rounds_left"] > 0:
-								if CONNECTIONS["SUBJECT"]["data"]["choice"] and CONNECTIONS["EXPERIMENTER"]["data"]["choice"]:
-									log(f'''Game played: {CONNECTIONS["SUBJECT"]["data"]["choice"]} -
-										{CONNECTIONS["EXPERIMENTER"]["data"]["choice"]}''')
-									CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
-										game.play_once(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"])
-									await send_all()
-									is_waiting = True
-									time.sleep(WAIT)
-									is_waiting = False
+				if not LOCK:
+					if GAMES_PLAYED < MAX_GAMES:
+						if READY:
+							# play the game
+							if client_type == "SUBJECT":
+								# subject plays the game
+								CONNECTIONS[client_type]["data"]["choice"] = data["choice"]
+							elif client_type == "EXPERIMENTER":
+								# discard choice and get actual choice from game AI based on selected strategy
+								CONNECTIONS[client_type]["data"]["choice"] = game.get_choice()
+							# calculate results if both players have chosen
+							if "SUBJECT" in CONNECTIONS and "EXPERIMENTER" in CONNECTIONS:
+								if CONNECTIONS["SUBJECT"]["data"]["game"]["rounds_left"] > 0:
+									if CONNECTIONS["SUBJECT"]["data"]["choice"] and CONNECTIONS["EXPERIMENTER"]["data"]["choice"]:
+										log(f'Game played: {CONNECTIONS["SUBJECT"]["data"]["choice"]} - ' \
+											f'{CONNECTIONS["EXPERIMENTER"]["data"]["choice"]}')
+										CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
+											game.play_once(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"])
+										await send_all()
+										# TODO: save events
+										LOCK = True
+										await asyncio.sleep(WAIT)
 
-									# generate new test
-									if CONNECTIONS["SUBJECT"]["data"]["game"]["SUBJECT"]["rounds_left"] <= 0:
-										GAMES_PLAYED += 1
+								# generate new test or end session
+								if CONNECTIONS["SUBJECT"]["data"]["game"]["rounds_left"] <= 0:
+									GAMES_PLAYED += 1
+									if GAMES_PLAYED >= MAX_GAMES:
+										CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
+											game.end_test(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"])
+										await send_all()
+										log(f'This session is over, all tests have been played.')
+									else:
 										CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
 											game.get_test(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"], GAMES_PLAYED)
 										await send_all()
-										log(f'Generating #{GAMES_PLAYED} game')
+										log(f'Generating #{(GAMES_PLAYED+1)} game')
+										LOCK = True
+										await asyncio.sleep(CONNECTIONS["SUBJECT"]["data"]["loading"])
+						else:
+							await echo(client_type, {"message": "You are not in a match yet."})
 					else:
-						await echo(client_type, {"message": "You are not in a match yet."})
+						await echo(client_type, {"message": "Your game session is over."})
 				else:
 					await echo(client_type, {"message": "Please wait a bit until sending in your next choice."})
+				LOCK = False
 
 	except websockets.ConnectionClosed:
 		log(f"{client_ip} ({client_type}) disconnected")
@@ -167,6 +181,7 @@ async def send(sender,data):
 				if key in CONNECTIONS[sender]["data"]:
 					CONNECTIONS[sender]["data"][key] = data[key]
 			data["timestamp"] = CONNECTIONS[sender]["data"]["timestamp"]
+			data["games_played"] = GAMES_PLAYED
 			message = json.dumps(data)
 			# send to others
 			for recipient in CONNECTIONS:
@@ -184,6 +199,7 @@ async def echo(sender,data):
 			if key in CONNECTIONS[sender]["data"]:
 				CONNECTIONS[sender]["data"][key] = data[key]
 		data["timestamp"] = CONNECTIONS[sender]["data"]["timestamp"]
+		data["games_played"] = GAMES_PLAYED
 		message = json.dumps(data)
 		for socket in CONNECTIONS[sender]["socket"]:
 			await socket.send(message)
@@ -193,12 +209,15 @@ async def send_all():
 	for sender in CONNECTIONS:
 		if CONNECTIONS[sender]["ready"]:
 			CONNECTIONS[sender]["data"]["timestamp"] = time.time()
-			message = json.dumps(CONNECTIONS[sender]["data"])
+			data = deepcopy(CONNECTIONS[sender]["data"])
+			data["games_played"] = GAMES_PLAYED
+			message = json.dumps(data)
 			for recipient in CONNECTIONS:
 				if sender != recipient:
 					if CONNECTIONS[recipient]["ready"]:
 						for socket in CONNECTIONS[recipient]["socket"]:
 							await socket.send(message)
+			CONNECTIONS[sender]["data"]["loading"] = 0
 
 #########
 
@@ -206,6 +225,7 @@ if __name__ == "__main__":
 	IP, PORT, LOG_FILE, WAIT, MAX_GAMES = game.get_settings(SETTINGS)
 	CONNECTIONS = {}
 	READY = False
+	LOCK = False
 	GAMES_PLAYED = 0
 	SESSION = 0 # make sure this increases every time
 	log(f"Starting game session {SESSION}")
