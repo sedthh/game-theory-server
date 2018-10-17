@@ -24,6 +24,7 @@ async def vr_server(websocket, path):
 	global CONNECTIONS, READY, GAMES_PLAYED, LOCK
 	client_type = "UNKNOWN"
 	client_ip = "0.0.0.0"
+	last_update = time.time()
 	if websocket.remote_address:
 		client_ip = str(websocket.remote_address[0])
 	log(f"Incoming connection: {client_ip}")
@@ -107,7 +108,9 @@ async def vr_server(websocket, path):
 			if "transform" in data and client_type in CONNECTIONS:
 				if "pos" in data["transform"] and "rot" in data["transform"]:
 					# update the headset rotation and send it to others
-					await send(client_type, {"transform": data["transform"]})
+					if time.time() > last_update + FPS:
+						await send(client_type, {"transform": data["transform"]})
+						last_update = time.time()
 
 			# subject sends their choice
 			if "choice" in data and data["choice"] in ("cooperate", "defect") and client_type in CONNECTIONS:
@@ -222,7 +225,7 @@ async def send_all():
 #########
 
 if __name__ == "__main__":
-	IP, PORT, LOG_FILE, WAIT, MAX_GAMES = game.get_settings(SETTINGS)
+	IP, PORT, LOG_FILE, WAIT, MAX_GAMES, FPS = game.get_settings(SETTINGS)
 	CONNECTIONS = {}
 	READY = False
 	LOCK = False

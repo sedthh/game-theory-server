@@ -62,7 +62,7 @@
 			var name = "";
 			var avatar = "";
 			var timer = + new Date();
-            var ws = new WebSocket("ws://192.168.10.104:8765/");
+            var ws = new WebSocket("ws://192.168.10.74:8765/");
 			var ping = 0;
 			var inGame = false;
 			var isSubject = false;
@@ -135,6 +135,8 @@
 
 			function setupGame(data){
 				console.log(data);
+				$("#cooperate").prop('disabled', true);
+				$("#defect").prop('disabled', true);
 				setTimeout(function(data){
 					if (data["is_vr"] && false){
 						$("#game").hide();
@@ -154,6 +156,8 @@
 							$("#opponent_score").html(data["game"]["SUBJECT"]["score"])
 						}
 					}
+					$("#cooperate").prop('disabled', false);
+					$("#defect").prop('disabled', false);
 				},data["loading"]*1000,data);
 			}
 
