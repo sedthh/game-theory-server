@@ -232,8 +232,13 @@ if __name__ == "__main__":
 	GAMES_PLAYED = 0
 	SESSION = 0 # make sure this increases every time
 	log(f"Starting game session {SESSION}")
-	log(f"Server started at {IP}:{PORT}")
-
+	log(f"Starting server at {IP}:{PORT}")
 	service = websockets.serve(vr_server, IP, PORT)
-	asyncio.get_event_loop().run_until_complete(service)
-	asyncio.get_event_loop().run_forever()
+	try:
+		asyncio.get_event_loop().run_until_complete(service)
+		asyncio.get_event_loop().run_forever()
+	except OSError as e:
+		log(f"Warning! Your server IP address is not {IP}!")
+		from socket import gethostbyname, gethostname
+		real_ip = gethostbyname(gethostname())
+		log(f"Change settings to {real_ip} instead!")

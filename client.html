@@ -35,15 +35,25 @@
 			}
 			#output{
 				text-align:center;
+				display:none;
+			}
+			input[type=button]{
+				display:block;
+				margin:auto;
+				text-align:center;
 			}
 		</style>
     </head>
 	<script src="tmp/js/jquery.min.js"></script>
     <body>
+		<div id="menu_join" class="menu">
+			<input id="server" type="text" value="192.168.1.1" placeholder="Server IP" />
+			<input id="connect" type="button" value="Connect to Server" />
+		</div>
 		<div id="menu_login" class="menu">
 			<input id="name" type="text" value="Tibi" placeholder="Please enter your name" />
 			<input id="avatar" type="text" value="Aang" placeholder="Please enter your avatar" />
-			<input id="login" type="button" value="Connect" />
+			<input id="login" type="button" value="Log In" />
 		</div>
 		<div id="menu_start" class="menu">
 			<input id="ready" type="button" value="Look for match" />
@@ -56,44 +66,49 @@
 			<br />
 			<b id="player_score">0</b>-<b id="opponent_score">0</b>
 		</div>
-		<hr />
 		<p id="output">Connecting...</p>
         <script>
 			var name = "";
 			var avatar = "";
 			var timer = + new Date();
-            var ws = new WebSocket("ws://192.168.10.74:8765/");
+            var ws = null;
 			var ping = 0;
 			var inGame = false;
 			var isSubject = false;
+			$("#server").val(localStorage["server"]);
+			$("#menu_join").show();
 
-            ws.onopen = function() {
-				$("#menu_login").show();
-				$("#output").hide();
-				inGame = false;
-			};
+			$("#connect").mousedown(function(event){
+				localStorage["server"] = $("#server").val()
+				ws = new WebSocket("ws://"+localStorage["server"]+":8765/");
+				ws.onopen = function() {
+					$("#menu_join").hide();
+					$("#menu_login").show();
+					inGame = false;
+				};
 
-			ws.onmessage = function (event) {
-                data = JSON.parse(event["data"]);
-				if ("message" in data){
-					timer = (+ new Date());
-					if (ping){
-						console.log(timer-ping);
+				ws.onmessage = function (event) {
+					data = JSON.parse(event["data"]);
+					if ("message" in data){
+						timer = (+ new Date());
+						if (ping){
+							console.log(timer-ping);
+						}
+						$("#output").text(data["message"]);
 					}
-					$("#output").text(data["message"]);
-				}
-				if ("game" in data){
-					setupGame(data);
-				}
-				ping = 0;
-            };
+					if ("game" in data){
+						setupGame(data);
+					}
+					ping = 0;
+				};
 
-			ws.onclose = function(event) {
-				$("#output").text("Server disconnected.");
-				console.log(event);
-				inGame = false;
-			};
-			
+				ws.onclose = function(event) {
+					$("#output").text("Server disconnected.");
+					console.log(event);
+					inGame = false;
+				};
+			});
+
 			$("#login").mousedown(function(event){
 				name = $("#name").val();
 				avatar = $("#avatar").val();
@@ -105,7 +120,6 @@
 				};
 				$("#menu_login").hide();
 				$("#menu_start").show();
-				$("#output").show();
 				send(data);
 				inGame = true;
 			});
@@ -115,6 +129,7 @@
 					"ready": true
 				}
 				$("#menu_start").hide();
+				$("#output").show();
 				send(data);
 			});
 
