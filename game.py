@@ -34,14 +34,13 @@ def get_settings(file):
 		settings.read(config)
 		if "SERVER" in settings:
 			try:
-				ip = settings["SERVER"]["IP"]
 				port = int(settings["SERVER"]["PORT"])
 				log_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), settings["SERVER"]["LOG_FILE"])
 				wait = int(settings["SERVER"]["WAIT"])
 				games = int(settings["SERVER"]["MAX_GAMES_BEFORE"]) + int(settings["SERVER"]["MAX_GAMES_VR"]) + int(settings["SERVER"]["MAX_GAMES_AFTER"])
 				fps = 1000.0/float(settings["SERVER"]["MAX_FPS"])/1000.0
 				get_data(file)
-				return ip, port, log_file, wait, games, fps
+				return port, log_file, wait, games, fps
 			except KeyError as error:
 				exit(f"Configuration file missing argument: {str(error)}")
 	exit(f"Missing or malformed configuration file: {file}")
@@ -209,6 +208,6 @@ def deepcopy_fix(item):
 	return new_item
 
 if __name__ == "__main__":
-	_, _, _, _, _, _ = get_settings("settings.ini")
+	_, _, _, _, _ = get_settings("settings.ini")
 	for i in range(MAX_GAMES_VR+2):
 		print(get_game(i))

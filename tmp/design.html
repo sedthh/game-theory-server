@@ -12,36 +12,173 @@
 				padding: 0;
 				color: #222;
 				overflow: hidden;
+				-webkit-user-select: none;  /* Chrome all / Safari all */
+				-moz-user-select: none;     /* Firefox all */
+				-ms-user-select: none;      /* IE 10+ */
+				user-select: none;          /* Likely future */
+			}
+
+			.card{
+				width: 100%;
+				height: 50%;
+				padding: 0px;
+				margin: 0px 24px;
+				overflow: hidden;
+				display: block;
+				position: relative;
+			}
+			.left{
+				width: 70%;
+				height: 100%;
+				display: inline-block;
+				padding: 0px;
+				margin: 0px;
+				position: absolute;
+				left: 0px;
+			}
+			.right{
+				width: 25%;
+				height: 100%;
+				display: inline-block;
+				padding: 0px;
+				margin: 0px;
+				position: absolute;
+				left: 75%;
+			}
+			.choices{
+				width: 100%;
+				height: 100%;
+				position: absolute;
+				padding: 0px;
+				margin: 0px;
+				bottom: 0px;
 			}
 			.button{
 				border: 5px solid #ddd;
-				border-radius: 12px;
+				border-radius: 24px;
 				text-transform: uppercase;
 				text-align: center;
 				display: inline-block;
 				background-color: #ddd;
 				color: #222;
+				width: 40%;
+				height: 50%;
+				margin: 0;
+				padding: 24px;
+				cursor: pointer;
+				position: absolute;
+				bottom: 0%;
+				vertical-align: middle;
+				display: table;
+				font-size: 60px;
+			}
+			.cooperate{
+				left: 0px;
+			}
+			.defect{
+				right: 24px;
 			}
 			.inactive{
 				color: #ccc;
+				cursor: not-allowed;
 			}
 			.click{
 				background-color:#fff;
 			}
 
+			.avatar{
+				position: absolute;
+				top: 24px;
+				background-color: #000;
+				border: 4px solid #000;
+				width: 48px;
+				height: 48px;
+			}
+			.name{
+				position: absolute;
+				top: 24px;
+				left: 72px;
+				font-size: 30px;
+				height: 48px;
+				line-height: 60px;
+			}
 			.number{
 				color: #fff;
 				background-color: #222;
 				text-align: center;
 				display: inline-block;
 				border: 5px solid #222;
-				border-radius: 12px;
+				border-radius: 24px;
+				width: 100%;
+				height: calc(100% - 24px);
+				position: absolute;
+				top: 24px;
+				right: 48px;
+				margin: auto;
+				vertical-align: middle;
+				display: table;
+				font-size: 120px;
+			}
+			p{
+        		display: table-cell;
+       			vertical-align: middle;
+       			margin: auto;
+       			text-align: center;
 			}
 		</style>
     </head>
 	<script src="js/jquery.min.js"></script>
     <body>
-		<div id="main">
+		<div class="card">
+			<div class="left">
+				<div class="avatar">
+					&nbsp;
+				</div>
+				<div class="name">
+					You
+				</div>
+				<div class="choices">
+					<div class="button cooperate">
+						<p>cooperate</p>
+					</div>
+					<div class="button defect">
+						<p>defect</p>
+					</div>
+				</div>
+			</div>
+			<div class="right">
+				<div class="number">
+					<p>0</p>
+				</div>
+			</div>
 		</div>
+		<div class="card">
+			<div class="left">
+				<div class="avatar">
+					&nbsp;
+				</div>
+				<div class="name">
+					You
+				</div>
+				<div class="choices">
+					<div class="button cooperate inactive">
+						<p>cooperate</p>
+					</div>
+					<div class="button defect inactive">
+						<p>defect</p>
+					</div>
+				</div>
+			</div>
+			<div class="right">
+				<div class="number">
+					<p>0</p>
+				</div>
+			</div>
+		</div>
+	<script>
+		$(function() {
+			$(".card").css({"height":$(window).height()/2-24})
+		});
+	</script>
     </body>
 </html>

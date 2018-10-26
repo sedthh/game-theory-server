@@ -6,6 +6,7 @@ import time
 import codecs
 import json
 from copy import deepcopy
+from socket import gethostbyname, gethostname
 
 import game
 SETTINGS = "settings.ini"
@@ -225,7 +226,8 @@ async def send_all():
 #########
 
 if __name__ == "__main__":
-	IP, PORT, LOG_FILE, WAIT, MAX_GAMES, FPS = game.get_settings(SETTINGS)
+	PORT, LOG_FILE, WAIT, MAX_GAMES, FPS = game.get_settings(SETTINGS)
+	IP = gethostbyname(gethostname())
 	CONNECTIONS = {}
 	READY = False
 	LOCK = False
@@ -234,11 +236,5 @@ if __name__ == "__main__":
 	log(f"Starting game session {SESSION}")
 	log(f"Starting server at {IP}:{PORT}")
 	service = websockets.serve(vr_server, IP, PORT)
-	try:
-		asyncio.get_event_loop().run_until_complete(service)
-		asyncio.get_event_loop().run_forever()
-	except OSError as e:
-		log(f"Warning! Your server IP address is not {IP}!")
-		from socket import gethostbyname, gethostname
-		real_ip = gethostbyname(gethostname())
-		log(f"Change settings to {real_ip} instead!")
+	asyncio.get_event_loop().run_until_complete(service)
+	asyncio.get_event_loop().run_forever()
