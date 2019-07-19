@@ -1,240 +1,299 @@
-# -*- coding: UTF-8 -*-
+#!/usr/bin/env python
 
+import time
+import json
 import asyncio
 import websockets
-import time
-import codecs
-import json
-from copy import deepcopy
+import atexit
 from socket import gethostbyname, gethostname
 
-import game
-SETTINGS = "settings.ini"
 
-def log(message):
-	global LOG_FILE
-	print(time.strftime("%H:%M:%S") + " > " + str(message))
-	f = codecs.open(LOG_FILE, "a+", encoding="utf-8")
-	f.write(time.strftime('%Y-%m-%d %H:%M:%S') + "\t" + str(message))
-	f.write("\r\n")
-	f.close()
+class Server:
 
-##########
+		DEFAULT_ROOM = "lobby"
+		DEFAULT_HISTORY = 50
 
-async def vr_server(websocket, path):
-	global CONNECTIONS, READY, GAMES_PLAYED, LOCK
-	client_type = "UNKNOWN"
-	client_ip = "0.0.0.0"
-	last_update = time.time()
-	if websocket.remote_address:
-		client_ip = str(websocket.remote_address[0])
-	log(f"Incoming connection: {client_ip}")
-	try:
-		while True:
-			data = json.loads(await websocket.recv())
-			# first connection
-			if client_type == "UNKNOWN" and "type" in data and data["type"] in ("SUBJECT", "EXPERIMENTER"):
-				client_type = data["type"]
-				if client_type in CONNECTIONS:
-					CONNECTIONS[client_type]["socket"].append(websocket)
-				else:
-					CONNECTIONS[client_type] = {
-						"socket": [websocket],		# send data from other connections here
-						"session": time.time(),		# time of connection established
-						"ready": False,  			# ready to take part in the experiment
-						"data": {
-							"timestamp": 0,				# current timestamp (gets updated)
-							"name": "Unknown",
-							"avatar": "default",
-							"environment": "default",	# current environment
-							"rotation": 0,				# rotation of environment
-							"loading": 0,				# show fake loading for this long
-							"message": "Connected.",	# messages for debugging
-							"choice": "",				# the last sent choice (["game"]["me"]["choice"] will also have its value)
-							"is_vr": False,				# is current game session a VR session
-							"is_over": False,			# is game session over
-							"game": {
-								"rounds_left": 0,
-								"SUBJECT": {
-									"choice": "",
-									"score": 0,
-									"score_all": 0
-								},
-								"EXPERIMENTER": {
-									"choice": "",
-									"score": 0,
-									"score_all": 0
-								}
-							},
-							"transform": {				# position and rotation of headset
-								"pos": {
-									"x": 0.0,
-									"y": 0.0,
-									"z": 0.0
-								},
-								"rot": {
-									"x": 0.0,
-									"y": 0.0,
-									"z": 0.0
-								}
-							}
-						}
-					}
-				log(f"{client_ip} is identified as {client_type}")
+		def __init__(self, ip="", port=42069, fps=1):
+			self.ip = ip if ip else gethostbyname(gethostname())
+			self.port = port
+			self.frequency = 1.0/fps
 
-			# connection is ready
-			if "ready" in data and client_type in CONNECTIONS:
-				CONNECTIONS[client_type]["ready"] = bool(data["ready"])
-				if "SUBJECT" in CONNECTIONS and "EXPERIMENTER" in CONNECTIONS:
-					if CONNECTIONS["SUBJECT"]["ready"] and CONNECTIONS["EXPERIMENTER"]["ready"]:
-						if not READY:
-							READY = True
-							log(f"Both subject and experimenter have joined the session")
-							CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
-								game.get_test(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"], GAMES_PLAYED)
-							await send_all()
-					elif READY:
-						READY = False
-						log(f"Session interrupted, {client_type} is not ready")
+			self.rooms = {}
+			self.open(self.DEFAULT_ROOM)
+			self.users = {}
+			self.loop = asyncio.get_event_loop()
+			asyncio.set_event_loop(self.loop)
+			self.service = None
+			self.tasks = []
 
-			# subject sets name (just save it for later)
-			if "name" in data and client_type in CONNECTIONS and data["name"]:
-				CONNECTIONS[client_type]["data"]["name"] = data["name"]
+		# start server
+		def run(self):
+			self.service = websockets.serve(self._connection, self.ip, self.port)
+			self.tasks = [asyncio.ensure_future(self.service), asyncio.ensure_future(self.tic())]
+			self.log(f"Server starting at {self.ip}:{self.port}")
+			try:
+				self.loop.run_until_complete(asyncio.gather(*self.tasks))
+				self.loop.run_forever()
+			except KeyboardInterrupt:
+				self.stop()
 
-			# subject sets avatar (just save it for later)
-			if "avatar" in data and client_type in CONNECTIONS and data["avatar"]:
-				CONNECTIONS[client_type]["data"]["avatar"] = data["avatar"]
+		@atexit.register
+		def stop(self):
+			self.log("Closing server.")
+			self.service.ws_server.close()
+			self.service.ws_server.wait_closed()
+			asyncio.gather(*asyncio.Task.all_tasks()).cancel()
+			self.loop.close()
+			self.loop = None
 
-			# sending headset transform information when received
-			if "transform" in data and client_type in CONNECTIONS:
-				if "pos" in data["transform"] and "rot" in data["transform"]:
-					# update the headset rotation and send it to others
-					if time.time() > last_update + FPS:
-						await send(client_type, {"transform": data["transform"]})
-						last_update = time.time()
+		# send out headset orientation on tics
+		async def tic(self):
+			current = time.time()
+			while True:
+				if current + self.frequency < time.time():
+					current = time.time()
+					await self.headsets()
+				await asyncio.sleep(self.frequency/10.0)
 
-			# subject sends their choice
-			if "choice" in data and data["choice"] in ("cooperate", "defect") and client_type in CONNECTIONS:
-				if not LOCK:
-					if GAMES_PLAYED < MAX_GAMES:
-						if READY:
-							# play the game
-							if client_type == "SUBJECT":
-								# subject plays the game
-								CONNECTIONS[client_type]["data"]["choice"] = data["choice"]
-							elif client_type == "EXPERIMENTER":
-								# discard choice and get actual choice from game AI based on selected strategy
-								CONNECTIONS[client_type]["data"]["choice"] = game.get_choice()
-							# calculate results if both players have chosen
-							if "SUBJECT" in CONNECTIONS and "EXPERIMENTER" in CONNECTIONS:
-								if CONNECTIONS["SUBJECT"]["data"]["game"]["rounds_left"] > 0:
-									if CONNECTIONS["SUBJECT"]["data"]["choice"] and CONNECTIONS["EXPERIMENTER"]["data"]["choice"]:
-										log(f'Game played: {CONNECTIONS["SUBJECT"]["data"]["choice"]} - ' \
-											f'{CONNECTIONS["EXPERIMENTER"]["data"]["choice"]}')
-										CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
-											game.play_once(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"])
-										await send_all()
-										# TODO: save events
-										LOCK = True
-										await asyncio.sleep(WAIT)
+		@staticmethod
+		def log(user, msg=None):
+			if msg is None:
+				user, msg = "", user
+			print(f'{time.strftime("%H:%M:%S")} > {user}{msg}')
 
-								# generate new test or end session
-								if CONNECTIONS["SUBJECT"]["data"]["game"]["rounds_left"] <= 0:
-									GAMES_PLAYED += 1
-									if GAMES_PLAYED >= MAX_GAMES:
-										CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
-											game.end_test(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"])
-										await send_all()
-										log(f'This session is over, all tests have been played.')
-									else:
-										CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"] = \
-											game.get_test(CONNECTIONS["SUBJECT"], CONNECTIONS["EXPERIMENTER"], GAMES_PLAYED)
-										await send_all()
-										log(f'Generating #{(GAMES_PLAYED+1)} game')
-										LOCK = True
-										await asyncio.sleep(CONNECTIONS["SUBJECT"]["data"]["loading"])
+		@staticmethod
+		def _validate_in(payload):
+			result = {}
+			for must in ("room", "data"):
+				if must not in payload:
+					raise KeyError(f"payload missing key {must}")
+				result[must] = payload[must]
+			result["cmd"] = payload["cmd"] if "cmd" in payload else "msg"
+			result["time"] = payload["time"] if "time" in payload else time.time()
+			return result
+
+		@staticmethod
+		def _validate_out(payload):
+			return {
+				"time": payload["time"] if "time" in payload else time.time(),
+				"user": payload["user"] if "user" in payload else "",
+				"cmd": payload["cmd"] if "cmd" in payload else "msg",
+				"data": payload["data"] if "data" in payload else ""
+			}
+
+		@staticmethod
+		def _validate_transform(payload):
+			if "transform" not in payload:
+				payload["transform"] = {}
+			for key in ("pos", "rot"):
+				if key not in payload["transform"]:
+					payload["transform"][key] = {}
+				for cord in ("x", "y", "z"):
+					if cord not in payload["transform"][key]:
+						payload["transform"][key][cord] = 0
+			return {key:payload["transform"][key] for key in ("pos", "rot")}
+
+		def id(self, user):
+			if not self.users[user]["nick"]:
+				return f'{self.users[user]["ip"]} '
+			return f'{self.users[user]["nick"]} ({self.users[user]["ip"]}) '
+
+		async def _connection(self, user, path):
+			# connect user
+			self.connect(user)
+			self.log(self.id(user), 'trying to connect')
+			try:
+				# wait for data from user once the connection is established
+				while True:
+					try:
+						self.users[user]["updated"] = time.time()
+						message = json.loads(await user.recv())
+
+						if not self.users[user]["auth"]:
+							# log in with credentials
+							if "login" in message:
+								# TODO: do actual authentication later
+								if "user" in message["login"]:
+									self.users[user]["nick"] = message["login"]["user"]
+									self.users[user]["auth"] = True
+									self.log(self.id(user), 'logged in')
+									await self.join(user, self.DEFAULT_ROOM)
 						else:
-							await echo(client_type, {"message": "You are not in a match yet."})
-					else:
-						await echo(client_type, {"message": "Your game session is over."})
-				else:
-					await echo(client_type, {"message": "Please wait a bit until sending in your next choice."})
-				LOCK = False
+							# check payload
+							try:
+								message = self._validate_in(message)
+							except KeyError as e:
+								self.log(self.id(user), 'sent invalid data')
+								continue
+							if message["cmd"] == "transform":
+								self.users[user]["transform"] = self._validate_transform(message)
+							elif message["cmd"] == "join":
+								await self.join(user, message["room"])
+							elif message["cmd"] == "leave":
+								await self.leave(user, message["room"])
+							else:
+								self.history(message["room"], self._validate_out({"user": self.users[user]["nick"], **message}))
 
-	except websockets.ConnectionClosed:
-		log(f"{client_ip} ({client_type}) disconnected")
-	finally:
-		if client_type in CONNECTIONS:
-			CONNECTIONS[client_type]["socket"] = \
-				[socket for socket in CONNECTIONS[client_type]["socket"] if socket != websocket]
-			if not CONNECTIONS[client_type]["socket"]:
-				del CONNECTIONS[client_type]
-		if READY:
-			if "SUBJECT" not in CONNECTIONS or "EXPERIMENTER" not in CONNECTIONS:
-				READY = False
-				log(f"Session interrupted, {client_type} disconnected")
+					except json.decoder.JSONDecodeError:
+						self.log(self.id(user), 'sent malformed JSON')
+						continue
 
-# send certain data (update sender's data with new data) and send it to everyone else but the sender
-async def send(sender,data):
-	global CONNECTIONS
-	if sender in CONNECTIONS:
-		if CONNECTIONS[sender]["ready"]:
-			# update sender's data
-			CONNECTIONS[sender]["data"]["timestamp"] = time.time()
-			for key in data:
-				if key in CONNECTIONS[sender]["data"]:
-					CONNECTIONS[sender]["data"][key] = data[key]
-			data["timestamp"] = CONNECTIONS[sender]["data"]["timestamp"]
-			data["games_played"] = GAMES_PLAYED
-			message = json.dumps(data)
-			# send to others
-			for recipient in CONNECTIONS:
-				if sender != recipient:
-					if CONNECTIONS[recipient]["ready"]:
-						for socket in CONNECTIONS[recipient]["socket"]:
-							await socket.send(message)
+			# disconnect user
+			except websockets.ConnectionClosed:
+				self.log(self.id(user), 'disconnected')
+			except websockets.WebSocketProtocolError:
+				self.log(self.id(user), 'broke protocol')
+			except websockets.PayloadTooBig:
+				self.log(self.id(user), 'sent payload that is too large')
+			except Exception as e:
+				self.log(self.id(user), f'caused unknown exception: {e}')
+			finally:
+				try:
+					await self.disconnect(user)
+				except Exception as e:
+					del self.users[user]
+					self.log(f'Failed to safely disconnect: {e}')
 
-# update sender's data and send it back to it
-async def echo(sender,data):
-	global CONNECTIONS
-	if sender in CONNECTIONS:
-		CONNECTIONS[sender]["data"]["timestamp"] = time.time()
-		for key in data:
-			if key in CONNECTIONS[sender]["data"]:
-				CONNECTIONS[sender]["data"][key] = data[key]
-		data["timestamp"] = CONNECTIONS[sender]["data"]["timestamp"]
-		data["games_played"] = GAMES_PLAYED
-		message = json.dumps(data)
-		for socket in CONNECTIONS[sender]["socket"]:
-			await socket.send(message)
+		# create user data when connection is established
+		def connect(self, user, data={}):
+			if user in self.users:
+				return
+			default = {
+				"auth": False,
+				"nick": "",
+				"level": "user",
+				"status": "online",
+				"connected": time.time(),
+				"updated": time.time(),
+				"ip": (user.remote_address[0] if user.remote_address else "0.0.0.0"),
+				"rooms": set(),
+				"meta": {},
+				"cache": [],
+				"transform": {
+					"pos": {
+						"x": 0.0,
+						"y": 0.0,
+						"z": 0.0
+					},
+					"rot": {
+						"x": 0.0,
+						"y": 0.0,
+						"z": 0.0
+					}
+				}
+			}
+			self.users[user] = {**default, **data}
 
-# send everything to everyone
-async def send_all():
-	for sender in CONNECTIONS:
-		if CONNECTIONS[sender]["ready"]:
-			CONNECTIONS[sender]["data"]["timestamp"] = time.time()
-			data = deepcopy(CONNECTIONS[sender]["data"])
-			data["games_played"] = GAMES_PLAYED
-			message = json.dumps(data)
-			for recipient in CONNECTIONS:
-				if sender != recipient:
-					if CONNECTIONS[recipient]["ready"]:
-						for socket in CONNECTIONS[recipient]["socket"]:
-							await socket.send(message)
-			CONNECTIONS[sender]["data"]["loading"] = 0
+		# remove user data when connection is closed
+		async def disconnect(self, user):
+			if user in self.users:
+				for room in self.users[user]["rooms"].copy():
+					await self.leave(user, room)
+				del self.users[user]
 
-#########
+		# open a new room
+		def open(self, room, payload={}):
+			if room in self.rooms:
+				return
+			default = {
+				"title": "",
+				"created": time.time(),
+				"users": set(),
+				"nicks": set(),
+				"history": [],
+				"size": self.DEFAULT_HISTORY
+			}
+			self.rooms[room] = {**default, **payload}
+
+		# close an existing room
+		async def close(self, room):
+			if room == self.DEFAULT_ROOM:
+				return
+			if room in self.rooms:
+				for user in self.users:
+					await self.leave(user, room, True)
+
+		# join an existing room
+		async def join(self, user, room):
+			if room and user in self.users and self.users[user]["auth"]:
+				if room not in self.rooms:
+					self.open(room)
+				self.users[user]["rooms"].add(room)
+				self.rooms[room]["users"].add(user)
+				self.rooms[room]["nicks"].add(self.users[user]["nick"])
+				# send history to user
+				await self.send(user, room, self.history(room))
+				await self.broadcast(room, [{"user": self.users[user]["nick"], "cmd": "join", "data": ""}])
+
+		async def leave(self, user, room, force=False):
+			if room and user in self.users and room in self.rooms:
+				await self.broadcast(room, [{"user": self.users[user]["nick"], "cmd": "leave", "data": ""}], ignore=(None if force else user))
+				self.users[user]["rooms"].discard(room)
+				self.rooms[room]["users"].discard(user)
+				self.rooms[room]["nicks"].discard(self.users[user]["nick"])
+				if len(self.rooms[room]["users"]) == 0:
+					if room != self.DEFAULT_ROOM:
+						del self.rooms[room]
+
+		def in_room(self, user, room):
+			if user in self.users:
+				if room in self.rooms:
+					return user in self.rooms[room]["users"]
+			return False
+
+		### handle sending messages
+
+		def _create_payload(self, room, payload, check=True):
+			if type(payload) is not list:
+				payload = [payload]
+			return {
+				"room": room,
+				"data": [self._validate_out(p) if check else p for p in payload]
+			}
+
+		# send payload as it is to user through websocket connection
+		async def post(self, user, message):
+			try:
+				if user in self.users:
+					await user.send(json.dumps(message))
+			except Exception as e:
+				self.log(f"Unable to send to {self.id(user)}: {e}")
+
+		# extend and send payload to a single user in a room
+		async def send(self, user, room, payload):
+			if room in self.rooms and user in self.users:
+				await self.post(user, self._create_payload(room, payload))
+
+		# extend and send payload to all users in a room (except selected one)
+		async def broadcast(self, room, payload, ignore=None):
+			if room in self.rooms:
+				message = self._create_payload(room, payload)
+				for recipient in self.rooms[room]["users"]:
+					if recipient in self.users and self.users[recipient]["auth"] and recipient != ignore:
+						await self.post(recipient, message)
+
+		# send all headset data to all rooms
+		async def headsets(self):
+			for room in self.rooms:
+				all_transforms = []
+				for recipient in self.rooms[room]["users"]:
+					all_transforms.append({
+						"user": self.users[recipient]["nick"],
+						"cmd": "transform",
+						"data": self.users[recipient]["transform"]
+					})
+				if all_transforms:
+					await self.broadcast(room, all_transforms)
+
+		def history(self, room, payload=None):
+			if room in self.rooms:
+				if payload is not None:
+					self.rooms[room]["history"].append(payload)
+					self.rooms[room]["history"] = self.rooms[room]["history"][-self.rooms[room]["size"]:]
+				return self.rooms[room]["history"]
+			else:
+				return []
 
 if __name__ == "__main__":
-	PORT, LOG_FILE, WAIT, MAX_GAMES, FPS = game.get_settings(SETTINGS)
-	IP = gethostbyname(gethostname())
-	CONNECTIONS = {}
-	READY = False
-	LOCK = False
-	GAMES_PLAYED = 0
-	SESSION = 0 # make sure this increases every time
-	log(f"Starting game session {SESSION}")
-	log(f"Starting server at {IP}:{PORT}")
-	service = websockets.serve(vr_server, IP, PORT)
-	asyncio.get_event_loop().run_until_complete(service)
-	asyncio.get_event_loop().run_forever()
+	server = Server()
+	server.run()

@@ -6,9 +6,10 @@ import json
 
 
 async def hello():
-    async with websockets.connect(f'ws://192.168.0.241:8765') as ws:
+    async with websockets.connect(f'ws://192.168.0.241:42069') as ws:
         msg = [
-            {"room": "system", "cmd": "login", "data": {"user": "Tibi", "pass": "1234"}},
+            {"login": {"user": "Tibi", "pass": "1234"}},
+            {"room": "lobby", "cmd": "msg", "data": "hello"},
             {"room": "main", "cmd": "join", "data": ""},
             {"room": "main", "cmd": "msg", "data": "hello"},
             {"room": "main", "cmd": "transform", "data": {
