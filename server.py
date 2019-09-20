@@ -69,7 +69,7 @@ class Server:
 				if must not in payload:
 					raise KeyError(f"payload missing key {must}")
 				result[must] = payload[must]
-			result["cmd"] = payload["cmd"] if "cmd" in payload else "msg"
+			result["type"] = payload["type"] if "type" in payload else "msg"
 			result["time"] = payload["time"] if "time" in payload else time.time()
 			return result
 
@@ -78,7 +78,7 @@ class Server:
 			return {
 				"time": payload["time"] if "time" in payload else time.time(),
 				"user": payload["user"] if "user" in payload else "",
-				"cmd": payload["cmd"] if "cmd" in payload else "msg",
+				"type": payload["type"] if "type" in payload else "msg",
 				"data": payload["data"] if "data" in payload else ""
 			}
 
@@ -180,14 +180,14 @@ class Server:
 
 							# in room
 							if self.in_room(user, message["room"]):
-								if message["cmd"] == "transform":
+								if message["type"] == "transform":
 									self.rooms[message["room"]]["users"][user]["transform"] = self._validate_transform(message)
-								elif message["cmd"] == "join":
+								elif message["type"] == "join":
 									# already in room
 									await self.system(user, 409)
-								elif message["cmd"] == "leave":
+								elif message["type"] == "leave":
 									await self.leave(user, message["room"])
-								elif message["cmd"] == "list":
+								elif message["type"] == "list":
 									await self.list_users(user, message["room"])
 								else:
 									# otherwise save the data to history and broadcast it
@@ -196,7 +196,7 @@ class Server:
 									await self.broadcast(message["room"], payload)
 							# not in room
 							else:
-								if message["cmd"] == "join":
+								if message["type"] == "join":
 									await self.join(user, message["room"])
 								else:
 									# need to join room first
@@ -301,7 +301,7 @@ class Server:
 					await self.send(user, room, history)
 
 				# broadcast join event for everyone but the user
-				await self.broadcast(room, [{"user": self.users[user]["nick"], "cmd": "join", "data": ""}], ignore=user)
+				await self.broadcast(room, [{"user": self.users[user]["nick"], "type": "join", "data": ""}], ignore=user)
 				self.log(self.id(user), f'joined "{room}" ({len(self.rooms[room]["users"].keys())})', 2)
 			else:
 				self.log(self.id(user), f'failed to join "{room}" ({len(self.rooms[room]["users"].keys())})', 2)
@@ -309,7 +309,7 @@ class Server:
 
 		async def leave(self, user, room, force=False):
 			if room and user in self.users and room in self.rooms:
-				await self.broadcast(room, [{"user": self.users[user]["nick"], "cmd": "leave", "data": ""}], ignore=(None if force else user))
+				await self.broadcast(room, [{"user": self.users[user]["nick"], "type": "leave", "data": ""}], ignore=(None if force else user))
 				self.users[user]["rooms"].discard(room)
 				del self.rooms[room]["users"][user]
 
@@ -324,7 +324,7 @@ class Server:
 		async def list_users(self, user, room):
 			if room and user in self.users and room in self.rooms:
 				nicks = sorted([self.rooms[room]["users"][con]["nick"] for con in self.rooms[room]["users"]], key=str.lower)
-				await self.send(user, room, [{"user": nick, "cmd": "join", "data": ""} for nick in nicks])
+				await self.send(user, room, [{"user": nick, "type": "join", "data": ""} for nick in nicks])
 			else:
 				self.log(self.id(user), f'failed to list users in "{room}" ({len(self.rooms[room]["users"].keys())})', 2)
 				await self.system(user, 401)
@@ -350,8 +350,9 @@ class Server:
 			if type(payload) is not list:
 				payload = [payload]
 			return {
+				"info": "user",
 				"room": room,
-				"data": [self._validate_out(p) if check else p for p in payload]
+				"payload": [self._validate_out(p) if check else p for p in payload]
 			}
 
 		# send payload as it is to user through websocket connection
@@ -371,9 +372,9 @@ class Server:
 		async def system(self, user, code=200, msg="", detail={}):
 			if user in self.users:
 				payload = {
-					"system": ("info" if (code >= 100 and code < 400) else "error"),
-					"time": time.time(),
+					"info": ("system" if (code >= 100 and code < 400) else "error"),
 					"response": {
+						"time": time.time(),
 						"code": code,
 						"msg": (msg if msg else self._get_system_message(code)),
 						"detail": detail
@@ -396,7 +397,7 @@ class Server:
 				for recipient in self.rooms[room]["users"]:
 					all_transforms.append({
 						"user": self.rooms[room]["users"][recipient]["nick"],
-						"cmd": "transform",
+						"type": "transform",
 						"data": self.rooms[room]["users"][recipient]["transform"]
 					})
 				if all_transforms:

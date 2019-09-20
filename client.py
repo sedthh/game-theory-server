@@ -8,13 +8,13 @@ import json
 async def hello():
     async with websockets.connect(f'ws://192.168.0.241:42069') as ws:
         msg = [
-            {"room": "lobby", "cmd": "msg", "data": "this will fail because I am not logged in"},
+            {"room": "lobby", "type": "msg", "data": "this will fail because I am not logged in"},
             {"system": "login", "options": {"user": "Tibi", "pass": "1234"}},
             {"system": "ping"},
-            {"room": "test", "cmd": "join", "data": ""},
+            {"room": "test", "type": "join", "data": ""},
             {"system": "rooms"},
-            {"room": "lobby", "cmd": "msg", "data": "hello"},
-            {"room": "lobby", "cmd": "transform", "data": {
+            {"room": "lobby", "type": "msg", "data": "hello"},
+            {"room": "lobby", "type": "transform", "data": {
                 "pos": {
                     "x": 7.0,
                     "y": 8.0,
@@ -26,9 +26,9 @@ async def hello():
                     "z": 6.0
                 }
             }},
-            {"room": "lobby", "cmd": "msg", "data": "hello again"},
-            {"room": "lobby", "cmd": "leave", "data": ""},
-            {"room": "lobby", "cmd": "msg", "data": "this will also fail"},
+            {"room": "lobby", "type": "msg", "data": "hello again"},
+            {"room": "lobby", "type": "leave", "data": ""},
+            {"room": "lobby", "type": "msg", "data": "this will also fail"},
         ]
         for m in msg:
             await ws.send(json.dumps(m))
