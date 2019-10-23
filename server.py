@@ -12,6 +12,8 @@ from datetime import datetime
 class Server:
 
 		DEFAULT_ROOM = "lobby"
+		JOIN_DEFAULT_ROOM = True
+		ALLOW_MULTIPLE_ROOMS = True
 		DEFAULT_HISTORY = 50
 
 		def __init__(self, ip="", port=42069, fps=1, log_level=3, log_file=""):
@@ -201,7 +203,8 @@ class Server:
 									self.log(self.id(user), 'logged in', 1)
 									await self.system(user, 202)
 									# await self.system(user, 400)
-									await self.join(user, self.DEFAULT_ROOM)
+									if self.JOIN_DEFAULT_ROOM:
+										await self.join(user, self.DEFAULT_ROOM)
 								else:
 									await self.system(user, 400)
 							elif message["system"] == "ping":
@@ -239,6 +242,11 @@ class Server:
 									await self.leave(user, message["room"])
 								elif message["type"] == "list":
 									await self.list_users(user, message["room"])
+								elif message["type"] == "button":
+									# same as msg but does not save it to history
+									payload = self._validate_out({"user": self.users[user]["nick"], **message})
+									self.dump(user, message["room"], message["type"], message["data"])
+									await self.broadcast(message["room"], payload)
 								else:
 									# otherwise save the data to history and broadcast it
 									payload = self._validate_out({"user": self.users[user]["nick"], **message})
@@ -248,7 +256,10 @@ class Server:
 							# not in room
 							else:
 								if message["type"] == "join":
-									await self.join(user, message["room"])
+									if self.ALLOW_MULTIPLE_ROOMS:
+										await self.join(user, message["room"])
+									else:
+										await self.switch(user, message["room"])
 								else:
 									# need to join room first
 									await self.system(user, 401)
@@ -362,8 +373,11 @@ class Server:
 
 		async def leave(self, user, room, force=False):
 			''' Leave a room, close room if empty, except if it's the default lobby '''
-			if room and user in self.users and room in self.rooms:
-				await self.broadcast(room, [{"user": self.users[user]["nick"], "type": "leave", "data": ""}], ignore=(None if force else user))
+			if not user or not room:
+				return
+			await self.broadcast(room, [{"user": self.users[user]["nick"], "type": "leave", "data": ""}],
+								 ignore=(None if force else user))
+			if user in self.users and room in self.rooms:
 				self.users[user]["rooms"].discard(room)
 				del self.rooms[room]["users"][user]
 
@@ -378,6 +392,14 @@ class Server:
 				self.log(self.id(user), f'failed to leave "{room}"', 2)
 				await self.system(user, 401)
 			self.dump(user, room, "leave", "")
+
+		async def switch(self, user, room):
+			''' Leave all other rooms and join new one '''
+			if user not in self.users:
+				return
+			for old_room in self.users[user]["rooms"].copy():
+				await self.leave(user, old_room)
+			await self.join(user, room)
 
 		async def list_users(self, user, room):
 			''' Send list of users in room for a single user (user has to be in that room) '''

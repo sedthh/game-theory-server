@@ -1,218 +1,370 @@
-<!DOCTYPE html>
 <html>
-    <head>
-        <title>Python Websocket Client</title>
-		<style>
-			body{
-				font-family: "Arial Rounded MT Bold", "Helvetica Rounded", Arial, sans-serif; font-size: 24px; font-style: normal; font-variant: normal; font-weight: 700; line-height: 26.4px;
-				color: #000;
-				overflow:hidden;
-			}
-			input{
-				font-family: "Arial Rounded MT", "Helvetica Rounded", Arial, sans-serif; font-size: 20px; font-style: normal; font-variant: normal;
-				color: #222;
-				margin:5px;
-				padding:5px;
-			}
-			p, b{
-				margin:5px;
-				padding:5px;
-			}
-			.menu{
-				display:none;
-				margin:auto;
-				text-align:center;
-				width:80%;
-				position:relative;
-			}
-			input[type=button]{
-				display:block;
-				margin: 12px auto 8px auto;
-				text-align:center;
-			}
-			#menu_connect{
-				display:block;
-			}
-			#output{
-				display:block;
-				position:relative;
-				top:20px;
-				right:8px;
-				height:200px;
-				width:100%;
-				margin:auto;
-				text-align:center;
-				background-color:#ccc;
-				padding:8px;
-				overflow-y:scroll;
-				text-align:left;
-				font-size:12px;
-			}
-			#json{
-				border: 1px solid #ddd;
-				background-color:#eee;
-				border-radius:5px;
-				display:block;
-				margin:auto;
-				padding:8px;
-				margin-top:20px;
-				width:80%;
-				text-align:left;
-				font-family: "Lucida Console", Monaco, monospace;
-				font-size:16px;
-				font-weight:500;
-			}
-		</style>
-    </head>
-	<script src="legacy/tmp/js/jquery.min.js"></script>
-    <body>
-		<div id="menu_connect" class="menu">
-			Connect to ws://<input id="server" type="text" value="192.168.1.1" placeholder="Server IP" />:42069/
-			<input id="connect" type="button" value="Connect to Server" />
+<head>
+	<link href="frontend/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
+	<script src="frontend/jquery.min.js"></script>
+	<style>
+		body{
+			margin:0;
+			overflow:hidden;
+			background-color:#555588;
+			color:#222222;
+		}
+		table{
+			border-spacing: 0;
+  			width:100%;
+  			height:100%;
+  			margin:0;
+  			padding:0;
+  			text-align:left;
+		}
+		td{
+
+		}
+		.top{
+			height:90%;
+			max-height:90%;
+		}
+		.bottom{
+			height:10%;
+			background-color:#444488;
+		}
+		.left{
+			width:80%;
+		}
+		.right{
+			width:20%;
+		}
+		.top td{
+			overflow-x:hidden;
+			overflow-y:scroll;
+		}
+		#history, #users{
+			min-height:100%;
+			padding:10px;
+			color:#eeeeee;
+			max-height:0;
+		}
+		#message{
+			width:100%;
+			height:100%;
+			margin:0px;
+			padding:0px 10px 0px 10px;
+		}
+		.button{
+			border-top: 1px solid #9999ee;
+			border-left: 1px solid #9999ee;
+			border-bottom: 1px solid #222266;
+			border-right: 1px solid #222266;
+			display:inline-table;
+			width:100%;
+			height:100%;
+			margin:0;
+			text-align:center;
+			cursor:pointer;
+			padding:0px 10px 0px 10px;
+			vertical-align:middle;
+		}
+		.button:hover{
+			opacity:.6;
+		}
+		.button:active{
+			opacity:.8;
+		}
+		#cooperate{
+			display:inline-block;
+			background-color:#00dd00;
+		}
+		#defect{
+			display:inline-block;
+			background-color:#dd0000;
+		}
+		#send{
+			background-color:#dddddd;
+		}
+		.disabled{
+			cursor:not-allowed;
+		}
+		#login{
+			display:block;
+			position:absolute;
+			z-index:1;
+			left:50%;
+			right:50%;
+			top:50%;
+			bottom:50%;
+		}
+		#login .inner{
+			width:300px;
+			height:150px;
+			position:relative;
+			left:-150px;
+			top:-75px;
+			border:1px solid #000000;
+			margin:auto;
+			padding:10px;
+			background-color:#ccccdd;
+		}
+		#nick{
+			width:100%;
+		}
+		#connect{
+			width:100px;
+			left:100px;
+			height:50px;
+			top:10px;
+			position:relative;
+		}
+
+		.noselect {
+			-webkit-touch-callout: none; /* iOS Safari */
+			-webkit-user-select: none; /* Safari */
+			-khtml-user-select: none; /* Konqueror HTML */
+			-moz-user-select: none; /* Old versions of Firefox */
+			-ms-user-select: none; /* Internet Explorer/Edge */
+			user-select: none; /* Non-prefixed version, currently supported by Chrome, Opera and Firefox */
+		}
+		h1{
+			font-size:16px;
+			padding-bottom:10px;
+		}
+		h2{
+			font-size:12px;
+			color:#ffffff;
+			padding:0px;
+		}
+		p{
+			display: table-cell;
+			vertical-align:middle;
+			text-align:center;
+			margin:auto;
+			height:100%;
+		}
+		b{
+			font-style: normal;
+			font-weight:bold;
+		}
+		i{
+			font-style: normal;
+			font-weight:bold;
+			color:#eecccc;
+		}
+	</style>
+</head>
+<body>
+	<div id="login">
+		<div class="inner">
+			<h1>Your nickname:</h1>
+			<input type="text" id="nick"></input>
+			<div id="connect" class="button"><p>connect</p></div>
 		</div>
-		<div id="menu_login" class="menu">
-			Unique nickname: <input id="nick" type="text" value="" placeholder="Nick" />
-			<input id="login" type="button" value="Log In" />
-		</div>
-		<div id="menu_messaging" class="menu">
-			Message: <input id="msg" type="text" value="" placeholder="" />
-			<input id="send" type="button" value="Send" />
-		</div>
-		<p id="json">connect client to ws://server:port</p>
-		<div id="output" class="menu">
-			OUTPUT
-		</div>
+	</div>
+	<table id="chat">
+		<tr class="top">
+			<td class="left">
+				<div id="history">
 
-        <script>
-        	var url = new URL(window.location);
-			var server = url.searchParams.get("server");
-			console.log(server);
+				</div>
+			</td>
+			<td class="right">
+				<div id="users">
 
-			var timer = + new Date();
-            var ws = null;
-			var ping = 0;
-			var logged_in = false;
-			var nick = "";
-			var output = "";
-			$("#server").val(localStorage["server"]);
-			$("#nick").val(localStorage["nick"]);
+				</div>
+			</td>
+		</tr>
+		<tr class="bottom">
+			<td class="left">
+				<table>
+					<tr>
+						<td id="scroll" class="left">
+							<input type="text" id="message" disabled="disabled" class="disabled"></input>
+						</td>
+						<td class="right">
+							<div id="send" class="button disabled"><p>send</p></div>
+						</td>
+					</tr>
+				</table>
+			</td>
+			<td class="right noselect">
+				<table>
+					<tr>
+						<td>
+							<div id="cooperate" class="button disabled">
+							</div>
+						</td>
+						<td>
+							<div id="defect" class="button disabled">
+							</div>
+						</td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	</table>
+<script>
+	var url = new URLSearchParams(window.location.search)
+	var server = url.has("server") ? url.get("server") : "127.0.0.1"
+	var port = url.has("port") ? url.get("port") : "42069"
 
-			$("#connect").click(function(event){
-				$("#connect").attr("disabled", true);
-				localStorage["server"] = $("#server").val();
-				ws = new WebSocket("ws://"+localStorage["server"]+":42069/");
+	var ws = null;
+	var ping = 0;
+	var connected = false;
 
-				ws.onopen = function(event) {
-					$("#menu_connect").hide();
-					$("#menu_login").show();
-					$("#login").click(function(event){
-						nick = $("#nick").val();
-						if (nick.length < 1){
-							return;
-						}
-						$("#login").attr("disabled", true);
-						localStorage["nick"] = nick;
-						payload = {
-							"system": "login",
-							"options": {
-								"user": nick,
-								"pass": "1234"
-							}
-						}
-						send(payload);
-						$("#login").attr("disabled", false);
-					});
-					$("#send").click(function(event){
-						msg = $("#msg").val();
-						if (msg.length < 1){
-							return;
-						}
-						payload = {
-							"room": "lobby",
-							"type": "msg",
-							"data": msg
-						}
-						send(payload);
-						msg = $("#msg").val("");
-					});
-					explain('{"system": "login", "options": {"user": "...", "pass": "..."}}')
-				};
+	var nick = localStorage["nick"];
+	var rooms = {};
 
-				ws.onmessage = function (event) {
-					data = JSON.parse(event["data"]);
-					timer = (+ new Date());
-					if (ping){
-						console.log(timer - ping);
-					}
-					ping = 0;
-					receive(data);
+	$("#nick").val(nick.length < 1 ? "Unknown" : nick);
+	$("#connect").click(function(event){
+		localStorage["nick"] = $("#nick").val();
+		if (localStorage["nick"].length < 1){
+			return;
+		}
+		nick = localStorage["nick"];
+		$("#login").hide();
+		$(".disabled").toggleClass("disabled");
+		$("#message").prop("disabled", false).focus();
+		add_history("Connecting to ws://" + server + ":" + port + "/ address.");
 
-					if (!logged_in){
-						if (data["info"] == "system"){
-							if ("response" in data && "code" in data["response"]){
-								if (data["response"]["code"] == 202){
-									// access granted
-									$("#menu_login").hide();
-									$("#menu_messaging").show();
-									logged_in = true;
-									explain('{"room": "lobby", "type": "msg", "data": "hello"}');
-								}
-							}
-						}
-					}else{
-
-					}
-				};
-
- 				ws.onerror = function(event) {
-            		$("#output").text("Unexpected Network Error.");
-            		console.log(event);
-         		};
-
-				ws.onclose = function(event) {
-					if (event.code == 1000) {
-						$("#output").text("Connection closed.");
-					}else{
-						$("#output").text("Server disconnected.");
-					}
-					$("#connect").attr("disabled", false);
-					output = "";
-					nick = "";
-					logged_in = false;
-					ws = null;
-					console.log(event);
-				};
-
+		ws = new WebSocket("ws://"+server+":"+port+"/");
+		ws.onopen = function(event) {
+			add_history("Connection established, logging in.");
+			$("#send").click(function(send_event){
+				message = $("#message").val();
+				if (message.length < 1){
+					return;
+				}
+				payload = {
+					"room": "lobby",
+					"type": "msg",
+					"data": message
+				}
+				send(payload);
+				$("#message").val("").focus();
+			});
+			$("#cooperate").click(function(send_event){
+				payload = {
+					"room": "lobby",
+					"type": "button",
+					"data": "cooperate"
+				}
+				send(payload);
+			});
+			$("#defect").click(function(send_event){
+				payload = {
+					"room": "lobby",
+					"type": "button",
+					"data": "defect"
+				}
+				send(payload);
+			});
+			$("#message").on("keypress", function(e) {
+				if(e.which == 13) {
+					$("#send").trigger("click");
+				}
 			});
 
-			function send(data){
-				if (ws){
-					ping = (+ new Date());
-					ws.send(JSON.stringify(data));
-				}
-			};
 
-			function receive(data){
-				if (data["info"] != "user"){
-					from = "<b>SYSTEM</b>";
-					msg = data["response"]["msg"];
-					output += from + ": " + msg + "<br/>\n";
-				}else{
-					for (var i=0; i<data["payload"].length; i++){
-						if (data["payload"][i]["type"] == "msg"){
+			payload = {
+				"system": "login",
+				"options": {
+					"user": nick,
+					"pass": "1234"
+				}
+			}
+			send(payload);
+		};
+		ws.onmessage = function (event) {
+			data = JSON.parse(event["data"]);
+			//console.log(data);
+			timer = (+ new Date());
+			if (ping){
+				console.log("PING: " + (timer - ping));
+			}
+			ping = 0;
+
+			if (data["info"] != "user"){
+				add_history(data["response"]["msg"]);
+			}else{
+				for (var i=0; i<data["payload"].length; i++){
+					switch (data["payload"][i]["type"]){
+						case "msg":
 							from = data["payload"][i]["user"];
 							msg = data["payload"][i]["data"];
-							output += from + ": " + msg + "<br/>\n";
-						}
+							add_history(msg, from);
+							break;
+						case "button":
+							from = data["payload"][i]["user"];
+							msg = data["payload"][i]["data"];
+							button = from + " pressed the button: " + msg;
+							add_history(button);
+						case "join":
+							user_join(data["payload"][i]["user"], data["payload"][i]["room"]);
+							break;
+						case "leave":
+							user_leave(data["payload"][i]["user"], data["payload"][i]["room"]);
+							break;
 					}
 				}
-				$("#output").html(output);
-				$('#output').scrollTop($('#output')[0].scrollHeight);
 			}
+		};
+		ws.onclose = function(event) {
+			add_history("Connection error.");
+			console.log(event);
+		};
 
-			function explain(json){
-				$("#json").text(json);
-			}
-        </script>
-    </body>
+	});
+
+	function add_history(message, from=""){
+		if (from.length < 1){
+			$("#history").append("<h2><i>SYSTEM&nbsp;>&nbsp;</i>"+message+"</h2>");
+		}else{
+			$("#history").append("<h2><b>"+from+"&nbsp;>&nbsp;</b>"+message+"</h2>");
+		}
+		$("#scroll").scrollTop($("#scroll")[0].scrollHeight);
+		$("#history").scrollTop($("#history")[0].scrollHeight);
+	}
+
+	function user_join(user, room){
+		if (!(room in rooms)){
+			rooms[room]= {};
+		}
+		if (!(user in rooms[room])){
+			rooms[room][user] = {"login": true};
+		}
+		update_room(room);
+	}
+	function user_leave(user, room){
+		if (!(room in rooms)){
+			rooms[room]= {};
+		}
+		if (user in rooms[room]){
+			delete rooms[room][user];
+		}
+		update_room(room);
+	}
+	function update_room(room){
+		user_list = [];
+		output = "";
+		if (!(room in rooms)){
+			rooms[room]= {};
+		}
+		for (user in rooms[room]){
+			user_list.push(user);
+		}
+		user_list.sort();
+		console.log(user_list);
+		for (var i=0; i<user_list.length; i++){
+			output += "<h2>" + user_list[i] + "</h2>";
+		}
+		$("#users").html(output);
+	}
+
+	function send(data){
+		if (ws){
+			ping = (+ new Date());
+			ws.send(JSON.stringify(data));
+		}
+	};
+
+</script>
+</body>
 </html>

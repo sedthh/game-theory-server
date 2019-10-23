@@ -11,7 +11,9 @@ async def hello():
             {"room": "lobby", "type": "msg", "data": "this will fail because I am not logged in"},
             {"system": "login", "options": {"user": "Tibi", "pass": "1234"}},
             {"system": "ping"},
-            {"room": "test", "type": "join", "data": ""},
+            #{"room": "test", "type": "join", "data": ""},
+            #{"room": "test", "type": "msg", "data": "hello test"},
+            {"room": "lobby", "type": "join", "data": ""},
             {"system": "rooms"},
             {"room": "lobby", "type": "msg", "data": "hello"},
             {"room": "lobby", "type": "transform", "data": {
@@ -27,8 +29,10 @@ async def hello():
                 }
             }},
             {"room": "lobby", "type": "msg", "data": "hello again"},
+            {"room": "lobby", "type": "button", "data": "cooperate"},
             {"room": "lobby", "type": "leave", "data": ""},
             {"room": "lobby", "type": "msg", "data": "this will also fail"},
+
         ]
         for m in msg:
             await ws.send(json.dumps(m))
