@@ -160,7 +160,7 @@
 	</div>
 	<table id="chat">
 		<tr class="top">
-			<td class="left">
+			<td id="scroll" class="left">
 				<div id="history">
 
 				</div>
@@ -175,7 +175,7 @@
 			<td class="left">
 				<table>
 					<tr>
-						<td id="scroll" class="left">
+						<td class="left">
 							<input type="text" id="message" disabled="disabled" class="disabled"></input>
 						</td>
 						<td class="right">
@@ -289,6 +289,8 @@
 						case "msg":
 							from = data["payload"][i]["user"];
 							msg = data["payload"][i]["data"];
+							date = new Date(data["payload"][i]["time"]).toISOString().slice(-13, -5);
+							from = "[" + date + "] " + from
 							add_history(msg, from);
 							break;
 						case "button":
@@ -297,19 +299,25 @@
 							button = from + " pressed the button: " + msg;
 							add_history(button);
 						case "join":
-							user_join(data["payload"][i]["user"], data["payload"][i]["room"]);
+							user_join(data["payload"][i]["user"], data["room"]);
 							break;
 						case "leave":
-							user_leave(data["payload"][i]["user"], data["payload"][i]["room"]);
+							user_leave(data["payload"][i]["user"], data["room"]);
 							break;
 					}
 				}
 			}
 		};
 		ws.onclose = function(event) {
-			add_history("Connection error.");
+			add_history("Connection closed.");
+			update_room();
 			console.log(event);
 		};
+		ws.onerror = function(event) {
+            add_history("Unable to connect. Try game.html?server=IP&port=42069 after running server.py in Python 3.");
+            update_room();
+            console.log(event);
+         };
 
 	});
 
@@ -319,8 +327,8 @@
 		}else{
 			$("#history").append("<h2><b>"+from+"&nbsp;>&nbsp;</b>"+message+"</h2>");
 		}
+
 		$("#scroll").scrollTop($("#scroll")[0].scrollHeight);
-		$("#history").scrollTop($("#history")[0].scrollHeight);
 	}
 
 	function user_join(user, room){
@@ -341,7 +349,11 @@
 		}
 		update_room(room);
 	}
-	function update_room(room){
+	function update_room(room=""){
+		if (room.length < 1){
+			$("#users").html("");
+			return;
+		}
 		user_list = [];
 		output = "";
 		if (!(room in rooms)){
