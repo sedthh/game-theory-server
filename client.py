@@ -3,7 +3,7 @@
 import asyncio
 import websockets
 import json
-
+from datetime import datetime
 
 async def hello():
     async with websockets.connect(f'ws://192.168.0.241:42069') as ws:
@@ -34,10 +34,13 @@ async def hello():
             await ws.send(json.dumps(m))
             print(json.loads(await ws.recv()))
         await ws.send(json.dumps(m))
+        print(datetime.timestamp(datetime.now()))
         print(json.loads(await ws.recv()))
         await ws.send(json.dumps(m))
+        print(datetime.timestamp(datetime.now()))
         print(json.loads(await ws.recv()))
 
+print(datetime.timestamp(datetime.now()))
 asyncio.get_event_loop().run_until_complete(hello())
 
 
